@@ -13,6 +13,8 @@ This is fairly standard:
 """
 from os.path import join
 from os import listdir
+import numpy as np
+
 try:
     import constants
     from REDTools import preprocess
@@ -69,13 +71,26 @@ for file in dropped:
         reasons.append('no log file')
         retry.append(file)
 
+#%%
+np.save(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'), retry, allow_pickle=True)
+
 #%% retry but without movecomp
 for file in retry:
     fpath = join(constants.BASE_DIRECTORY, 'raw', file)
     max_opts['f'] = fpath
     max_opts['o'] = join(constants.BASE_DIRECTORY, 'MaxFiltered', file)
+    max_opts['lg'] = join(constants.BASE_DIRECTORY, 'b_logs', f'{file.split(".")[0]}.log'),
     max_opts['movecomp'] = False
     preprocess.maxFilt(cluster=True, **max_opts)
+
+#%% plot diagnostic plots from the logs
+summary_data = []
+logpath = join(constants.BASE_DIRECTORY, 'b_logs')
+for log in listdir(logpath):
+    tmp = preprocess.plot_MaxLog(logpath=join(logpath, log),
+                outpath=join(constants.BASE_DIRECTORY, 'plots'), plot=True)
+    summary_data.append(tmp)
+
 ##############################
 #%% 2. Filtering & Denoising #
 ##############################

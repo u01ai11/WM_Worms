@@ -118,7 +118,7 @@ def __preprocess_individual(file, outdir, overwrite):
         print('could not read ' + file)
         return ''
 
-    raw.filter(0.1, None)
+    raw.filter(1, None)
     raw.notch_filter(freqs=np.arange(50, 75, 50))
     # Run ICA on raw data to find blinks and eog
     ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
