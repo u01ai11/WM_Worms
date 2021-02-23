@@ -65,7 +65,7 @@ def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, 
         pythonf = f"""
 import sys 
 sys.path.insert(0, '{repopath}')
-import RedMegTools.preprocess as red_preprocess
+import REDTools.preprocess as red_preprocess
 red_preprocess.__preprocess_individual('{indir}/{flist[i]}', '{outdir}', {overwrite})
         """
         # save to file
