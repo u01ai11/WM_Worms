@@ -97,6 +97,7 @@ def __preprocess_individual(file, outdir, overwrite):
     f_only = os.path.basename(file).split('_')  # get filename parts seperated by _
     num = f_only[0]
 
+    base = os.path.basename(file).split('.')[0]
     # check if any of these files exists, if not overwrite then skip and return path
     # could be any of these names
     check_fnames = [f'{outdir}/{num}_{f_only[2]}_noeog_noecg_clean_raw.fif',
@@ -169,13 +170,13 @@ def __preprocess_individual(file, outdir, overwrite):
 
     # save the file
     if no_ecg_removed and no_eog_removed:
-        outfname = f'{outdir}/{num}_{f_only[2]}_noeog_noecg_clean_raw.fif'
+        outfname = f'{outdir}/{base}_noeog_noecg_clean_raw.fif'
     elif no_ecg_removed:
-        outfname = f'{outdir}/{num}_{f_only[2]}_noecg_clean_raw.fif'
+        outfname = f'{outdir}/{base}_noecg_clean_raw.fif'
     elif no_eog_removed:
-        outfname = f'{outdir}/{num}_{f_only[2]}_noeog_clean_raw.fif'
+        outfname = f'{outdir}/{base}_noeog_clean_raw.fif'
     else:
-        outfname = f'{outdir}/{num}_{f_only[2]}_clean_raw.fif'
+        outfname = f'{outdir}/{base}_clean_raw.fif'
 
     raw.save(outfname, overwrite=overwrite)
     save_file_path = outfname

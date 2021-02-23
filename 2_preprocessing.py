@@ -12,6 +12,7 @@ This is fairly standard:
 """
 from os.path import join
 from os import listdir
+import os
 import numpy as np
 import mne
 try:
@@ -41,4 +42,17 @@ started = listdir(maxpath)
 done = listdir(outdir)
 dropped = [i for i in started if i not in done]
 
-dropped[0]
+#%% rename some files that didn't load
+# This is because we can't concetenate them due to bad channels excluded by maxfilter
+# so try again
+for file in dropped:
+    if '-' in file: # if we are second part, rename
+        os.system(f'mv {join(maxpath, file)} {join(maxpath, file.replace("-", "_"))}')
+overwrite = False
+preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite)
+
+#%% check number of files for each UID
+uid = list(set([i.split('_')[0] for i in started]))
+count = [len([i for i in done if ii in i]) for ii in uid]
+rem_ids =
+
