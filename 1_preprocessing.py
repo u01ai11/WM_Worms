@@ -69,12 +69,12 @@ for file in dropped:
         reasons.append('no log file')
         retry.append(file)
 
+#%% retry but without movecomp
 for file in retry:
     fpath = join(constants.BASE_DIRECTORY, 'raw', file)
     max_opts['f'] = fpath
     max_opts['o'] = join(constants.BASE_DIRECTORY, 'MaxFiltered', file)
-    max_opts['hpi_g'] = '0.90'
-    max_opts['hpi_e'] = '15'
+    max_opts['movecomp'] = False
     preprocess.maxFilt(cluster=True, **max_opts)
 ##############################
 #%% 2. Filtering & Denoising #

@@ -212,9 +212,14 @@ def maxFilt(cluster=False, **kw):
     hpi_g = kw.get('hpi_g')
     hpi_e = kw.get('hpi_e')
 
-    max_cmd = f"{maxf_cmd} -f {f} -o {o} -trans {trans} -frame {frame} -regularize {regularize}" \
-              f" -st {st} -corr {cor} -origin {orig} -in {inval} -out {outval} -movecomp {movecomp}" \
-              f" {bads_cmd}-autobad on -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
+    if movecomp == False:
+        max_cmd = f"{maxf_cmd} -f {f} -o {o} -trans {trans} -frame {frame} -regularize {regularize}" \
+                  f" -st {st} -corr {cor} -origin {orig} -in {inval} -out {outval}" \
+                  f" {bads_cmd}-autobad on -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
+    else:
+        max_cmd = f"{maxf_cmd} -f {f} -o {o} -trans {trans} -frame {frame} -regularize {regularize}" \
+                  f" -st {st} -corr {cor} -origin {orig} -in {inval} -out {outval} -movecomp {movecomp}" \
+                  f" {bads_cmd}-autobad on -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
 
     if cluster:
         # submit to cluster
