@@ -35,7 +35,7 @@ outdir = join(constants.BASE_DIRECTORY, 'cleaned')
 scriptpath = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = constants.PYTHON_PATH
 overwrite = True
-preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite)
+preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, constants.REPO_PATH)
 
 #%% check output
 started = listdir(maxpath)

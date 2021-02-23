@@ -43,7 +43,7 @@ def preprocess_multiple(flist, indir, outdir, overwrite, njobs):
     return saved_files
 
 
-def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite):
+def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, repopath):
     """ Takes a list of raw files and preprocesses them
     Parameters
     ----------
@@ -64,7 +64,7 @@ def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite):
 
         pythonf = f"""
 import sys 
-sys.path.insert(0, '/home/ai05/Kids_Phono_Oddball')
+sys.path.insert(0, '{repopath}')
 import RedMegTools.preprocess as red_preprocess
 red_preprocess.__preprocess_individual('{indir}/{flist[i]}', '{outdir}', {overwrite})
         """
