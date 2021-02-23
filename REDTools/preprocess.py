@@ -121,7 +121,11 @@ def __preprocess_individual(file, outdir, overwrite):
     raw.filter(1, None)
     raw.notch_filter(freqs=np.arange(50, 75, 50))
     # Run ICA on raw data to find blinks and eog
-    ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
+    try:
+        ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
+    except:
+        raw.crop(1) # remove the first second due to NaNs
+        ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
 
     try:
         # look for and remove EOG

@@ -1,14 +1,10 @@
 """
-1_preprocessing.py
+1_maxfiltering.py
 Alex Anwyl-Irvine 2021
 
 This is fairly standard:
 
 1. MaxFilter files
-2. Clean files
-    a. Filter
-    b. Downsample
-    c. ICA denoising
 
 """
 from os.path import join
@@ -91,6 +87,3 @@ for log in listdir(logpath):
                 outpath=join(constants.BASE_DIRECTORY, 'plots'), plot=True)
     summary_data.append(tmp)
 
-##############################
-#%% 2. Filtering & Denoising #
-##############################
