@@ -40,3 +40,18 @@ PYTHON_PATH  = join('/home/ai05/.conda/envs/mne_2/bin/python')
 
 # This is the path that contains RED tools for sbatch imports
 REPO_PATH = join('/home/ai05/WM_Worms')
+
+TRIGGERS = {
+       'ITI': 201,
+       'STIM': 202,
+       'DELAY': 203,
+       'L_CUE': 250,
+       'R_CUE': 251,
+       'N_CUE': 252,
+       'POSTCUE': 205,
+       'L_PROBE': 240,
+       'R_PROBE': 241,
+       'RESP': 207,
+       'FEEDBACK': 208
+}
+

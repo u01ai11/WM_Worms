@@ -145,7 +145,7 @@ def __preprocess_individual(file, outdir, overwrite):
             print(f'{num} run {f_only[2]} cannot detect eog automatically manual ICA must be done')
             no_eog_removed = True
 
-    except RuntimeError:
+    except:
         print(f'{num} run {f_only[2]} cannot detect eog automatically manual ICA must be done')
         no_eog_removed = True
 
@@ -163,7 +163,7 @@ def __preprocess_individual(file, outdir, overwrite):
             print(f'{num} run {f_only[2]} cannot detect ecg automatically manual ICA must be done')
             no_ecg_removed = True
             ica.apply(inst=raw)
-    except RuntimeError:
+    except:
         print(f'{num} run {f_only[2]} cannot detect ecg automatically manual ICA must be done')
         no_ecg_removed = True
         ica.apply(inst=raw)
