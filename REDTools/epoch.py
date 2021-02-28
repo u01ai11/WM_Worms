@@ -47,6 +47,7 @@ def epoch_multiple(ids, event_dict,time_dict, indir, outdir, file_id, cluster, s
     # if we are on the cluster
     else:
         for _id in ids:
+            print(_id)
             #construct file string for the cluster command
             id_files = [i for i in all_files if _id in i]
             pycom = f"""
@@ -56,13 +57,13 @@ from REDTools import epoch
 
 epoch.epoch_participant({id_files}, {event_dict},{time_dict}, '{indir}', '{outdir}', '{file_id}')
             """
-        # save to file
-        print(pycom, file=open(join(scriptdir, f'{_id}_epoch.py'), 'w'))
-        # construct csh file
-        tcshf = f"""#!/bin/tcsh
-            {pythonpath} {join(scriptdir, f'{_id}_epoch.py')}
-                    """
-        # save to directory
-        print(tcshf, file=open(join(scriptdir, f'{_id}_epoch.csh'), 'w'))
-        # execute this on the cluster
-        os.system(f"sbatch --job-name=epoch_{_id} --mincpus=4 -t 0-3:00 {join(scriptdir, f'{_id}_epoch.csh')}")
+            # save to file
+            print(pycom, file=open(join(scriptdir, f'{_id}_epoch.py'), 'w'))
+            # construct csh file
+            tcshf = f"""#!/bin/tcsh
+                {pythonpath} {join(scriptdir, f'{_id}_epoch.py')}
+                        """
+            # save to directory
+            print(tcshf, file=open(join(scriptdir, f'{_id}_epoch.csh'), 'w'))
+            # execute this on the cluster
+            os.system(f"sbatch --job-name=epoch_{_id} --mincpus=4 -t 0-3:00 {join(scriptdir, f'{_id}_epoch.csh')}")
