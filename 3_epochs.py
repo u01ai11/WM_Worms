@@ -30,7 +30,7 @@ ids.sort()
 
 event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
 
-time_dict = {'tmin': 0.4,'tmax': 1.5,'baseline': None}
+time_dict = {'tmin': 0.5,'tmax': 1.5,'baseline': None}
 
 epochs = epoch.epoch_multiple(ids=ids,
                                  event_dict=event_dict,
@@ -57,3 +57,30 @@ epochs = epoch.epoch_multiple(ids=ids,
                                  cluster=True,
                                  scriptdir=join(constants.BASE_DIRECTORY, 'b_scripts'),
                                  pythonpath='/home/ai05/.conda/envs/mne_2/bin/python')
+
+#%% initial processing whole cue
+
+#%% initial processing - postcue
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
+clean = [f for f in listdir(cleandir) if 'no' not in f]
+ids = list(set([i.split('_')[0] for i in clean]))
+ids.sort()
+
+event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
+
+time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
+
+epochs = epoch.epoch_multiple(ids=ids,
+                                 event_dict=event_dict,
+                                 time_dict= time_dict,
+                                 indir=cleandir,
+                                 outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                 file_id='wholecue',
+                                 cluster=True,
+                                 scriptdir=join(constants.BASE_DIRECTORY, 'b_scripts'),
+                                 pythonpath='/home/ai05/.conda/envs/mne_2/bin/python')
+
+#%% load in behavioural data
+datadir = join(constants.BASE_DIRECTORY, 'behav')
+data_f = listdir(datadir)
+part_f = [[ii for ii in data_f if i in ii] for i in ids]
