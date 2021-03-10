@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 try:
     import constants
     from REDTools import epoch
+
 except:
     import sys
     sys.path.insert(0, '/home/ai05/WM_Worms')
@@ -33,7 +34,20 @@ epodir = join(constants.BASE_DIRECTORY, 'epoched')
 probe_files =[f for f in listdir(epodir) if 'probe' in f]
 probe_ids = list(set([f.split('_')[0] for f in probe_files]))
 probe_ids.sort()
+datadir = join(constants.BASE_DIRECTORY, 'behav')
 
+#%% load behavioural data
+data_files = listdir(datadir)
+data_trials = [i for i in datafiles if 'trials' in i]
+df = pd.read_csv(join(datadir, data_trials[1]), delimiter="\t")
+all_trials = pd.DataFrame(columns=df.columns)
+for _id in probe_ids:
+    _file = [f for f in data_trials if _id in f][0]
+    _df = pd.read_csv(join(datadir, data_trials[1]), delimiter="\t")
+
+
+
+#%%
 good_ids = []
 def decode_probe(_id):
     #load in epochs
