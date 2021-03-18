@@ -12,6 +12,9 @@ from os.path import join
 from os import listdir
 import numpy as np
 import mne
+import statsmodels as sm
+from statsmodels.stats import anova
+from statsmodels.stats import weightstats
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -19,6 +22,7 @@ from mne.decoding import (SlidingEstimator, cross_val_multiscore)
 import joblib
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 try:
     import constants
     from REDTools import epoch
@@ -37,18 +41,111 @@ probe_ids.sort()
 datadir = join(constants.BASE_DIRECTORY, 'behav')
 
 #%% load behavioural data
+meta = pd.read_csv(join(constants.BASE_DIRECTORY, 'Combined3.csv'))
 data_files = listdir(datadir)
-data_trials = [i for i in datafiles if 'trials' in i]
+data_trials = [i for i in data_files if 'trials' in i]
 df = pd.read_csv(join(datadir, data_trials[1]), delimiter="\t")
-all_trials = pd.DataFrame(columns=df.columns)
+all_trials = pd.DataFrame(columns=list(df.columns) + ['id'])
+good_ids = []
 for _id in probe_ids:
-    _file = [f for f in data_trials if _id in f][0]
-    _df = pd.read_csv(join(datadir, data_trials[1]), delimiter="\t")
+    _file = [f for f in data_trials if _id in f]
+    if len(_file) == 0:
+        continue
+    try:
+        _df = pd.read_csv(join(datadir, _file[0]), delimiter="\t")
+    except:
+        continue
+    _idcol = pd.DataFrame({'id': [_id]*len(_df)})
+    _df = _df.join(_idcol)
+    all_trials = all_trials.append(_df, ignore_index=True)
+    good_ids.append(_id)
+
+#
+all_trials['offset'] = all_trials['targ_ang'] - all_trials['resp_ang']
+all_trials['offset'] = all_trials['offset'].astype('float')
+all_trials['offset_abs'] = all_trials['offset'].abs()
+all_trials['cue_type'] = ['neutral' if i == 0 else 'valid' for i in all_trials['cue_dir']]
+rolling_tmp = [all_trials[all_trials['id'] == i]['offset_abs'].rolling(25).mean() for i in all_trials['id'].unique()]
+rolling_mean = []
+for i in rolling_tmp:
+    rolling_mean = rolling_mean + list(i)
+all_trials['rolling_offset'] = rolling_mean
+#%% Compare accuracy for cued vs non-cued trials
+
+# Within subjects ANOVA
+dv = 'resp_onset'#'perc_diff'
+grp = 'cue_dir'
+per_part = all_trials.groupby(['id', grp]).mean()
+per_part = per_part.reset_index()
+model = anova.AnovaRM(all_trials, depvar=dv,
+                      subject='id', within=[grp], aggregate_func='mean')
+res = model.fit()
+print(res)
+
+#posthocs
+left = np.array(per_part[per_part['cue_dir'] == -1][dv])
+right = np.array(per_part[per_part['cue_dir'] == -1][dv])
+neutral = np.array(per_part[per_part['cue_dir'] == -1][dv])
+
+l_r = weightstats.ttost_paired(left,right)
 
 
+plt.close('all')
+ax = sns.barplot(x=grp, y=dv, data=per_part,
+                 linewidth=2.5, facecolor=(1, 1, 1, 0),
+                 errcolor=".2", edgecolor=".2", ci='sd', capsize=0.2)
+sns.stripplot(x=grp, y=dv, data=per_part, zorder=1,
+              size=2, jitter=0.4,ax=ax)
+
+plt.show()
+
+#%% over time
+plt.close('all')
+#sns.lineplot(y='rolling_offset', x='trialnr', hue='id', data=all_trials, legend=False)
+sns.lineplot(y='rolling_offset', x='trialnr', hue='cue_dir',data=all_trials)
+plt.show()
+
+#%% does average peformance predict WM assessments?
+av_part = all_trials.groupby(['id']).mean()
+av_part = av_part.reset_index()
+c_name = 'WASI_Mat'
+m_name = 'offset_abs'
+covar = []
+for i in av_part.id.unique():
+    try:
+        covar.append(float(meta[meta['Alex_ID'] == i][c_name]))
+    except:
+        covar.append(np.nan)
+av_part[c_name] = covar
+av_part[c_name] = (av_part[c_name] - av_part[c_name].mean())/av_part[c_name].std(ddof=0)
+av_part[m_name] = (av_part[m_name] - av_part[m_name].mean())/av_part[m_name].std(ddof=0)
+plt.close('all')
+sns.regplot(y=m_name, x=c_name, data=av_part)
+sp = abs(av_part[[c_name, m_name]].corr('spearman').iloc[0,1])
+plt.text(1,1,f'Spearman R {np.round(sp,2)}')
+plt.show()
+
+#%% regressor on evoked data. i.e. does offset predict activity in maintenance phase
+good_ids = list(av_part.id) # ids we have data for
+cue_files = [f for f in listdir(epodir) if 'postcue' in f] # cue files
+_id = good_ids[0]
+name = [''
+def get_evoked(_id, name):
+    try:
+        file = [i for i in cue_files if _id in i][0]
+        epochs = mne.epochs.read_epochs(join(epodir, file))
+        #load in meta data to epochs
+        evoked = epochs[name].average()
+        return evoked
+    except:
+        return None
+
+left = joblib.Parallel(n_jobs=5)(
+    joblib.delayed(get_evoked)(_id, 'L_CUE') for _id in good_ids)
 
 #%%
-good_ids = []
+
+
 def decode_probe(_id):
     #load in epochs
     print(_id)
@@ -74,7 +171,7 @@ def decode_probe(_id):
         return [0,0]
 
 id_scores_coeff = joblib.Parallel(n_jobs=15)(
-    joblib.delayed(decode_probe)(_id) for _id in probe_ids)
+    joblib.delayed(decode_probe)(_id) for _id in good_ids)
 
 #%% illustrate decoding accuracy
 id_scores_coeff_c = [i for i in id_scores_coeff if len(i) >1]
@@ -110,7 +207,7 @@ good_ids = np.array(probe_ids)[np.array([len(i)>1 for i in id_scores])]
 np.save(join(constants.BASE_DIRECTORY, f'decoded_ids.npy'),good_ids)
 
 #%% proceed with alpha lateralisation analysis using these participants!
-cue_files = [f for f in listdir(epodir) if 'postcue' in f]
+cue_files = [f for f in listdir(epodir) if 'wholecue' in f]
 good_ids = np.load(join(constants.BASE_DIRECTORY, f'decoded_ids.npy'))
 
 def get_evoked(_id, name):
@@ -385,3 +482,65 @@ part_f = [i if len(i) > 1 else ['','',''] for i in part_f]
 part_f = [[l] +f for l,f in zip(epo_len, part_f)]
 part_f = [[_id] + i for i, _id in zip(part_f, probe_ids)]
 df = pd.DataFrame(part_f, columns=['ID', 'Epochs', 'Detailed', 'Events', 'Trials'])
+
+
+#%% event epoch
+
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
+clean = [f for f in listdir(cleandir) if 'no' not in f]
+ids = list(set([i.split('_')[0] for i in clean]))
+ids.sort()
+
+thisind = 12
+
+all = [[i for i in clean if ii in i] for ii in good_ids]
+this_raw = all[thisind]
+this_id = good_ids[thisind]
+this_trials = all_trials[all_trials.id == this_id]
+this_trials = this_trials[this_trials.prac != 1]
+raw = mne.io.read_raw_fif(join(cleandir, this_raw[0]), preload=True)
+
+#event_dict = {'Delay': 202}
+event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
+time_dict = {'tmin': 0.0,'tmax': 1.5,'baseline': None}
+
+events = mne.find_events(raw, shortest_event=1)
+epochs = mne.Epochs(raw, events, event_dict, tmin=time_dict['tmin'],
+                    tmax=time_dict['tmax'], baseline=time_dict['baseline'],
+                    preload=True, proj=True)
+
+#match to behavioural data
+# find first event for behavioural logging zero time
+b_zero = this_trials.iloc[0].iti_onset
+
+# sometimes the first event doesn't come through, so we need to adjust our zero-time for this!
+acceptable_events = [201,202,203,250,251,252,205,240,241] # first events we will accept
+e_names = ['ITI', 'STIM', 'DELAY', 'LEFT_C', 'R_CUE', 'N_CUE', 'POSTCUE', 'PROBE_L', 'PROBE_R'] # names of events
+first_ITI = this_trials.iloc[0].iti # ITI of the first trial
+adjustments =[0, first_ITI, first_ITI+1000, first_ITI+2000, first_ITI+2000, first_ITI+2000, first_ITI+2500,
+              first_ITI+3500,first_ITI+3500,] # adjustments for these events
+# same for MEG events
+# now find first acceptable event index
+first = [(i, val) for i, val in enumerate(events[:,2]) if val in acceptable_events][0]
+first_t = events[first[0],0] # get time stamp
+t_zero = first_t - (adjustments[acceptable_events.index(first[1])]) # adjust according to adjustments
+
+# for every trial work out an encapsulating time range zero'd to the first ITI
+this_trials['z_start'] = this_trials['iti_onset'] - b_zero
+this_trials['z_end'] = this_trials['probe_onset'] - b_zero
+this_trials['z_end'] = this_trials['z_end'] + 4999
+
+# loop through epochs and find matching meta data
+meta_df = pd.DataFrame(columns=this_trials.columns)
+unfound_ind = []
+for ind in range(len(epochs)):
+    this_ztime = epochs[ind].events[0,0] - t_zero
+    if this_ztime < 0:
+        t_zero = epochs[ind].events[0,0]
+        this_ztime = epochs[ind].events[0, 0] - t_zero
+    mask = (this_trials['z_start'] <= this_ztime) & (this_trials['z_end'] >= this_ztime)
+    if mask.sum() == 0:
+        unfound_ind.append(ind)
+    meta_df = meta_df.append(this_trials[mask], ignore_index=True)
+
+epochs.metadata = meta_df
