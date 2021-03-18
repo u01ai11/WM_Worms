@@ -491,13 +491,14 @@ clean = [f for f in listdir(cleandir) if 'no' not in f]
 ids = list(set([i.split('_')[0] for i in clean]))
 ids.sort()
 
-thisind = 12
+thisind = 14
 
 all = [[i for i in clean if ii in i] for ii in good_ids]
 this_raw = all[thisind]
 this_id = good_ids[thisind]
 this_trials = all_trials[all_trials.id == this_id]
 this_trials = this_trials[this_trials.prac != 1]
+
 raw = mne.io.read_raw_fif(join(cleandir, this_raw[0]), preload=True)
 
 #event_dict = {'Delay': 202}
@@ -528,7 +529,7 @@ t_zero = first_t - (adjustments[acceptable_events.index(first[1])]) # adjust acc
 # for every trial work out an encapsulating time range zero'd to the first ITI
 this_trials['z_start'] = this_trials['iti_onset'] - b_zero
 this_trials['z_end'] = this_trials['probe_onset'] - b_zero
-this_trials['z_end'] = this_trials['z_end'] + 4999
+this_trials['z_end'] = this_trials['z_end'] + 5000
 
 # loop through epochs and find matching meta data
 meta_df = pd.DataFrame(columns=this_trials.columns)
@@ -543,4 +544,7 @@ for ind in range(len(epochs)):
         unfound_ind.append(ind)
     meta_df = meta_df.append(this_trials[mask], ignore_index=True)
 
+emask = ~np.zeros([len(epochs)]).astype(bool)
+emask[unfound_ind] = False
+n_epochs = epochs[emask]
 epochs.metadata = meta_df

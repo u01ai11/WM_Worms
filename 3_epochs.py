@@ -12,6 +12,7 @@ from os.path import join
 from os import listdir
 import numpy as np
 import mne
+import pandas as pd
 
 try:
     import constants
@@ -80,7 +81,40 @@ epochs = epoch.epoch_multiple(ids=ids,
                                  scriptdir=join(constants.BASE_DIRECTORY, 'b_scripts'),
                                  pythonpath='/home/ai05/.conda/envs/mne_2/bin/python')
 
+#%%
+"""
+EPOCHS WITH METADATA
+
+"""
 #%% load in behavioural data
 datadir = join(constants.BASE_DIRECTORY, 'behav')
-data_f = listdir(datadir)
-part_f = [[ii for ii in data_f if i in ii] for i in ids]
+meta = pd.read_csv(join(constants.BASE_DIRECTORY, 'Combined3.csv'))
+data_files = listdir(datadir)
+data_trials = [i for i in data_files if 'trials' in i]
+df = pd.read_csv(join(datadir, data_trials[1]), delimiter="\t")
+all_trials = pd.DataFrame(columns=list(df.columns) + ['id'])
+good_ids = []
+for _id in ids:
+    _file = [f for f in data_trials if _id in f]
+    if len(_file) == 0:
+        continue
+    try:
+        _df = pd.read_csv(join(datadir, _file[0]), delimiter="\t")
+    except:
+        continue
+    _idcol = pd.DataFrame({'id': [_id]*len(_df)})
+    _df = _df.join(_idcol)
+    all_trials = all_trials.append(_df, ignore_index=True)
+    good_ids.append(_id)
+
+#%% Try with postcue
+event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
+time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
+epochs, missed = epoch_multiple_meta(ids=good_ids,
+                                     event_dict = event_dict,
+                                     time_dict=time_dict,
+                                     indir=cleandir,
+                                     outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                     file_id='metapostcue',
+                                     njobs=10,
+                                     all_trials=all_trials)
