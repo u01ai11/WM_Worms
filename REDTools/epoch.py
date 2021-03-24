@@ -5,6 +5,7 @@ import numpy as np
 import mne
 import joblib
 import pandas as pd
+import sys
 
 def epoch_participant(part_files, event_dict,time_dict, indir, outdir, file_id):
     """
@@ -134,11 +135,12 @@ def epoch_multiple_meta(ids, event_dict,time_dict, indir, outdir, file_id, njobs
     all_files = [f for f in listdir(indir) if 'no' not in f]
     part_files_all = [[i for i in all_files if p in i] for p in ids]
 
-    all_es, missed = joblib.Parallel(n_jobs=njobs)(
+    output = joblib.Parallel(n_jobs=njobs)(
         joblib.delayed(epoch_participant_meta)(part_files, event_dict,time_dict, indir, outdir, file_id, all_trials, _id) for part_files, _id in zip(part_files_all, ids)
     )
 
-    return all_es, missed
+
+    return output
 
 
 def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file_id, all_trials, _id):
@@ -155,61 +157,51 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
     :return:
     """
     p_id = part_files[0].split('_')[0]
-    if os.path.isfile(join(outdir, f'{p_id}_{file_id}-epo.fif')):
-        return [], []
+
+    # if os.path.isfile(join(outdir, f'{p_id}_{file_id}-epo.fif')):
+    #     epochs = mne.read_epochs(join(outdir, f'{p_id}_{file_id}-epo.fif'))
+    #     return epochs, [], False
+
+    try:
+        # First we read in epochs from all passed in participant files
+        datelist = []
+        epolist = []
+        for file in part_files:
+            raw = mne.io.read_raw_fif(join(indir, file), preload=True)
+            datelist.append(raw.info['meas_date'])
+            events = find_events_CBU(raw)
+            epochs = mne.Epochs(raw, events, event_dict, tmin=time_dict['tmin'],
+                                tmax=time_dict['tmax'], baseline=time_dict['baseline'],
+                                preload=True, proj=True)
+            epolist.append(epochs)
+
+        # if we had more than one, then order them by date and calculate seconds difference for offsetting
+        if len(part_files) > 1:
+            epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)] # tuples of time and epochs
+            epotime = sorted(epotime, key=lambda row: row[0]) # sort epochs
+            time_diffs = [epotime[i+1][0] - epotime[0][0] for i in range(len(epotime)-1)] # workout offset times for all in lists relative to first scan
+            for off_ep in range(len(time_diffs)): # now adjust all these epochs (other than first one) to account for offset
+                for i in range(len(epolist[off_ep+1])): # loop through epoch events
+                    epolist[off_ep+1].events[i, 0] = epolist[off_ep+1].events[i, 0] + (time_diffs[off_ep] * 1000) # add this offset
+            epo = mne.concatenate_epochs(epolist, add_offset=False) # concatenate, disabling MNEs default offsetting
+        else:
+            epo = epolist[0]
+
+        ep_meta = epoch_meta(epo, indir, all_trials, _id)
+        epochs = ep_meta[0]
+        missed_epochs = ep_meta[1]
+
+        p_id = part_files[0].split('_')[0]
+        epochs.save(join(outdir, f'{p_id}_{file_id}-epo.fif'), overwrite=True)
+        error = False
+    except:
+        error = sys.exc_info()[0:2]
+        epochs = []
+        missed_epochs = []
+    return epochs, missed_epochs, error
 
 
-    epochs = [epoch_no_filter(f, event_dict, time_dict, indir, _id) for f in part_files] # get epochs
-
-    # concatenate if needed
-    if len(epochs) > 1:
-        epochs = mne.concatenate_epochs(epochs) # concat
-        # work out which raw file was first using timestamps
-        s_times = []
-        for f in part_files:
-            raw = mne.io.read_raw_fif(join(indir, f))
-            s_times.append((f, raw.info['meas_date'].timestamp()))
-        file = sorted(s_times,key=lambda row: row[1])[0][0]
-
-    else:
-        epochs = epochs[0]
-        file = part_files[0]
-
-    ep_meta = epoch_meta(file, epochs, indir, all_trials, _id)
-    epochs = [i[0] for i in ep_meta]
-    missed_epochs = [i[1] for i in ep_meta]
-
-    p_id = part_files[0].split('_')[0]
-    epochs.save(join(outdir, f'{p_id}_{file_id}-epo.fif'), overwrite=True)
-    return epochs, missed_epochs
-
-def epoch_no_filter(file, event_dict, time_dict, indir, _id):
-    """
-    epoch from raw but without a filter
-
-    :param file: raw file name
-    :param event_dict: dictiopnary for events
-    :param time_dict: dictionary for epoch cuts
-    :param indir: were we are finding the raw file
-    :param _id: participant ID
-    :return:
-    """
-    raw = mne.io.read_raw_fif(join(indir, file), preload=True) # read file
-    # detect blinks
-    eog_events = mne.preprocessing.find_eog_events(raw)
-    n_blinks = len(eog_events)
-    # Center to cover the whole blink with full duration of 0.5s:
-    onset = eog_events[:, 0] / raw.info['sfreq'] - 0.25
-    duration = np.repeat(0.5, n_blinks)
-    raw.set_annotations(mne.Annotations(onset, duration, ['bad blink'] * n_blinks,orig_time=raw.info['meas_date']))
-
-    events = mne.find_events(raw, shortest_event=1) # read any events from one sanple
-    epochs = mne.Epochs(raw, events, event_dict, tmin=time_dict['tmin'],
-                        tmax=time_dict['tmax'], baseline=time_dict['baseline'],
-                        preload=True, proj=True) # extract epochs
-    return epochs
-
-def epoch_meta(file, epochs, indir, all_trials, _id):
+def epoch_meta(epo, indir, all_trials, _id):
     """
     adds meta data to epochs
     :param file:
@@ -223,49 +215,69 @@ def epoch_meta(file, epochs, indir, all_trials, _id):
     """
 
     this_trials = all_trials[all_trials.id == _id]  # get trials for this ID
-    this_trials = this_trials[this_trials.prac != 1]  # ignore practice trials
-    raw = mne.io.read_raw_fif(join(indir, file), preload=True) # read file
-    events = mne.find_events(raw, shortest_event=1) # read any events from one sanple
-    #match to behavioural data
-    # find first event for behavioural logging zero time
-    b_zero = this_trials.iloc[0].iti_onset
+    # calculate start and ends of epochs in time since start of recording
+    this_trials['end'] = this_trials['probe_onset'] + this_trials['resp_onset'] + this_trials['resp_duration']
+    this_trials['start'] = this_trials['iti_onset']
 
-    #match to behavioural data
-    # find first event for behavioural logging zero time
-    b_zero = this_trials.iloc[0].iti_onset
+    # settings for iterating
+    trial_adjust = 0
+    iterations = 0
+    itercrement = 250
+    iterlim = 10000
 
-    # sometimes the first event doesn't come through, so we need to adjust our zero-time for this!
-    acceptable_events = [201,202,203,250,251,252,205,240,241] # first events we will accept
-    e_names = ['ITI', 'STIM', 'DELAY', 'LEFT_C', 'R_CUE', 'N_CUE', 'POSTCUE', 'PROBE_L', 'PROBE_R'] # names of events
-    first_ITI = this_trials.iloc[0].iti # ITI of the first trial
-    adjustments =[0, first_ITI, first_ITI+1000, first_ITI+2000, first_ITI+2000, first_ITI+2000, first_ITI+2500,
-                  first_ITI+3500,first_ITI+3500,] # adjustments for these events
-    # same for MEG events
-    # now find first acceptable event index
-    first = [(i, val) for i, val in enumerate(events[:,2]) if val in acceptable_events][0]
-    first_t = events[first[0],0] # get time stamp
-    t_zero = first_t - (adjustments[acceptable_events.index(first[1])]) # adjust according to adjustments
+    # optimisation for speed (i.e. don't perform operations on pandas DF)
+    time_array = this_trials[['start', 'end']].to_numpy()  # array is faster
+    epo_ev = epo.events.copy() # copy to prevent issues with original object
+    aligned = False # flag for alignment
+    while not aligned:
+        print(iterations)
+        unfound_ind = []
+        trial_inds = []
+        for ind in range(len(epo)):
+            epo_s = epo_ev[ind, 0]  # this epoch's time in ms
+            mask = (time_array[:, 0] - trial_adjust <= epo_s) & (time_array[:, 1] - trial_adjust >= epo_s)
+            if mask.sum() == 0:
+                unfound_ind.append(ind)
+            else:
+                trial_inds.append(np.where(mask == True)[0][0])
+        if len(unfound_ind) == 0:
+            meta_df = this_trials.iloc[trial_inds]
+            epo.metadata = meta_df
+            aligned = True
+        else:
+            trial_adjust = trial_adjust + itercrement
+            iterations += 1
+            if iterations > iterlim:
+                break
+    # we can filter somewhere else (commented out for speed)
+    # epo.filter(1, 200., fir_design='firwin', skip_by_annotation='edge')
+    # epo.resample(600., npad='auto')
+    return epo, unfound_ind
 
-    # for every trial work out an encapsulating time range zero'd to the first ITI
-    this_trials['z_start'] = this_trials['iti_onset'] - b_zero
-    this_trials['z_end'] = this_trials['probe_onset'] - b_zero
-    this_trials['z_end'] = this_trials['z_end'] + 5000
-    # loop through epochs and find matching meta data
-    meta_df = pd.DataFrame(columns=this_trials.columns)
-    unfound_ind = []
-    for ind in range(len(epochs)):
-        this_ztime = epochs[ind].events[0,0] - t_zero
-        if this_ztime < 0:
-            t_zero = epochs[ind].events[0,0]
-            this_ztime = epochs[ind].events[0, 0] - t_zero
-        mask = (this_trials['z_start'] <= this_ztime) & (this_trials['z_end'] >= this_ztime)
-        if mask.sum() == 0:
-            unfound_ind.append(ind)
-        meta_df = meta_df.append(this_trials[mask], ignore_index=True)
-    try:
-        epochs.metadata = meta_df
-    except:
-        print(f'Issue with {_id} {file}; Only {len(meta_df)} trials matched out of {len(epochs)} epochs!')
-    epochs.filter(1, 200., fir_design='firwin', skip_by_annotation='edge')
-    epochs.resample(600., npad='auto')
-    return epochs, unfound_ind
+def find_events_CBU(raw):
+    """
+    Find real events by reconstructing STIM from 8bit channel
+
+    :param raw:
+    :return: events_v the real events
+    """
+    stim_chs = ('STI001', 'STI002', 'STI003', 'STI004', 'STI005', 'STI006', 'STI007', 'STI008')
+    stim_data = (raw
+                 .copy()
+                 .load_data()
+                 .pick_channels(stim_chs)
+                 .get_data())
+    stim_data /= 5  # Signal is always +5V
+
+    # First channel codes for bit 1, second for bit 2, etc.
+    for stim_ch_idx, _ in enumerate(stim_chs):
+        stim_data[stim_ch_idx, :] *= 2 ** stim_ch_idx
+
+    # Create a virtual channel which is the sum of the individual channels.
+    stim_data = stim_data.sum(axis=0, keepdims=True)
+    info = mne.create_info(['STI_VIRTUAL'], raw.info['sfreq'], ['stim'])
+    stim_raw = mne.io.RawArray(stim_data, info, first_samp=raw.first_samp)
+
+    events_v = mne.find_events(stim_raw, stim_channel='STI_VIRTUAL',
+                               shortest_event=1)
+    return events_v

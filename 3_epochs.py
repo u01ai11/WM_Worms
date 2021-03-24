@@ -28,7 +28,7 @@ cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
 clean = [f for f in listdir(cleandir) if 'no' not in f]
 ids = list(set([i.split('_')[0] for i in clean]))
 ids.sort()
-
+#%%
 event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
 
 time_dict = {'tmin': 0.5,'tmax': 1.5,'baseline': None}
@@ -110,7 +110,8 @@ for _id in ids:
 #%% Try with postcue
 event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
 time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
-epochs, missed = epoch_multiple_meta(ids=good_ids,
+result = epoch_multiple_meta(
+    ids=good_ids,
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
@@ -118,3 +119,15 @@ epochs, missed = epoch_multiple_meta(ids=good_ids,
                                      file_id='metapostcue',
                                      njobs=10,
                                      all_trials=all_trials)
+
+#%% mop up and manually align error trials
+epodir = join(constants.BASE_DIRECTORY, 'epoched')
+check = [i for i in listdir(epodir) if 'metapostcue' in i]
+
+checklist = []
+for file in check:
+    epo = mne.epochs.read_epochs(join(epodir, file))
+    try:
+        checklist.append([(epo[i]._name, int(epo[i].metadata.cue_dir)) for i in range(len(epo))])
+    except:
+        checklist.append([])
