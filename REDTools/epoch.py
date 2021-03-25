@@ -6,6 +6,7 @@ import mne
 import joblib
 import pandas as pd
 import sys
+import traceback
 
 def epoch_participant(part_files, event_dict,time_dict, indir, outdir, file_id):
     """
@@ -158,9 +159,10 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
     """
     p_id = part_files[0].split('_')[0]
 
-    # if os.path.isfile(join(outdir, f'{p_id}_{file_id}-epo.fif')):
-    #     epochs = mne.read_epochs(join(outdir, f'{p_id}_{file_id}-epo.fif'))
-    #     return epochs, [], False
+    if os.path.isfile(join(outdir, f'{p_id}_{file_id}-epo.fif')):
+        #epochs = mne.read_epochs(join(outdir, f'{p_id}_{file_id}-epo.fif'), preload=False)
+        epochs = f'{p_id}_{file_id}-epo.fif'
+        return epochs, [], False
 
     try:
         # First we read in epochs from all passed in participant files
@@ -169,13 +171,20 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
         for file in part_files:
             raw = mne.io.read_raw_fif(join(indir, file), preload=True)
             datelist.append(raw.info['meas_date'])
-            events = find_events_CBU(raw)
+            #events = find_events_CBU(raw)
+            events = mne.find_events(raw, shortest_event=1)
             epochs = mne.Epochs(raw, events, event_dict, tmin=time_dict['tmin'],
                                 tmax=time_dict['tmax'], baseline=time_dict['baseline'],
                                 preload=True, proj=True)
             epolist.append(epochs)
 
+
+
         # if we had more than one, then order them by date and calculate seconds difference for offsetting
+        if len(part_files) > 1:
+            epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)] # tuples of time and epochs
+            epotime = sorted(epotime, key=lambda row: row[0]) # sort epochs
+            epolist = [i[1] for i in epotime]
         if len(part_files) > 1:
             epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)] # tuples of time and epochs
             epotime = sorted(epotime, key=lambda row: row[0]) # sort epochs
@@ -183,6 +192,11 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
             for off_ep in range(len(time_diffs)): # now adjust all these epochs (other than first one) to account for offset
                 for i in range(len(epolist[off_ep+1])): # loop through epoch events
                     epolist[off_ep+1].events[i, 0] = epolist[off_ep+1].events[i, 0] + (time_diffs[off_ep] * 1000) # add this offset
+            #make sure nchan the same
+            nchans = [i.info['nchan'] for i in epolist]
+            if len(set(nchans)) > 1:
+                for i in range(len(epolist)):
+                    epolist[i].pick_types(meg=True, chpi=False)
             epo = mne.concatenate_epochs(epolist, add_offset=False) # concatenate, disabling MNEs default offsetting
         else:
             epo = epolist[0]
@@ -195,7 +209,7 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
         epochs.save(join(outdir, f'{p_id}_{file_id}-epo.fif'), overwrite=True)
         error = False
     except:
-        error = sys.exc_info()[0:2]
+        error = traceback.format_exc()
         epochs = []
         missed_epochs = []
     return epochs, missed_epochs, error
@@ -224,6 +238,7 @@ def epoch_meta(epo, indir, all_trials, _id):
     iterations = 0
     itercrement = 250
     iterlim = 10000
+    revs = 0
 
     # optimisation for speed (i.e. don't perform operations on pandas DF)
     time_array = this_trials[['start', 'end']].to_numpy()  # array is faster
@@ -248,7 +263,15 @@ def epoch_meta(epo, indir, all_trials, _id):
             trial_adjust = trial_adjust + itercrement
             iterations += 1
             if iterations > iterlim:
-                break
+                # reverse if we haven't already
+                if itercrement > 0:
+                    iterations = 0
+                    trial_adjust = 0
+                    itercrement = 0 - itercrement
+                else:
+                    # break if we have already
+                    raise RuntimeError(f'Failed to find alignments. {len(unfound_ind)} out of {len(epo)} epochs misallinged')
+                    break
     # we can filter somewhere else (commented out for speed)
     # epo.filter(1, 200., fir_design='firwin', skip_by_annotation='edge')
     # epo.resample(600., npad='auto')
@@ -281,3 +304,48 @@ def find_events_CBU(raw):
     events_v = mne.find_events(stim_raw, stim_channel='STI_VIRTUAL',
                                shortest_event=1)
     return events_v
+
+
+def epoch_downsample_cluster(files, epodir, high, low, rate, savgol, scriptdir, pythonpath):
+
+    _tracker = 0
+    for file in files:
+        pycom = f"""
+import sys
+sys.path.insert(0, '/home/ai05/WM_Worms')
+from REDTools import epoch
+epoch.epoch_downsample('{join(file,epodir)}', {high}, {low}, {rate}, {savgol})
+                    """
+        # save to file
+        print(pycom, file=open(join(scriptdir, f'{_tracker}_epoch.py'), 'w'))
+        # construct csh file
+        tcshf = f"""#!/bin/tcsh
+                        {pythonpath} {join(scriptdir, f'{_tracker}_epoch.py')}
+                                """
+        # save to directory
+        print(tcshf, file=open(join(scriptdir, f'{_tracker}_epoch.csh'), 'w'))
+        # execute this on the cluster
+        os.system(f"sbatch --job-name=epoch_{_tracker} --mincpus=4 -t 0-3:00 {join(scriptdir, f'{_tracker}_epoch.csh')}")
+
+
+def epoch_downsample(eponame,epodir, high, low, rate, savgol):
+    """
+    Take an epoch and downsample it to 200Hz
+    :param epoch:
+    :return:
+
+    """
+    epo = mne.epochs.read_epochs(join(epodir, eponame))
+    # if already filtered, don't do it again
+    if (epo.info['sfreq'] == rate) & (epo.info['lowpass'] == low):
+        return eponame
+    # we can filter somewhere else (commented out for speed)
+    if savgol:
+        epo.savgol_filter(h_freq=high)
+    else:
+        epo.filter(high, low, fir_design='firwin', skip_by_annotation='edge')
+    epo.resample(rate, npad='auto')
+    epo.save(join(epodir, eponame),overwrite=True)
+
+    return eponame
+

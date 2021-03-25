@@ -13,7 +13,7 @@ from os import listdir
 import numpy as np
 import mne
 import pandas as pd
-
+import joblib
 try:
     import constants
     from REDTools import epoch
@@ -107,8 +107,11 @@ for _id in ids:
     all_trials = all_trials.append(_df, ignore_index=True)
     good_ids.append(_id)
 
+#%% whittle out poor performers
+trials = [(i, len(all_trials[all_trials.id == i])) for i in good_ids]
+good_ids = [i[0] for i in trials if i[1] > 34]
 #%% Try with postcue
-event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252,}
+event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252}
 time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
 result = epoch_multiple_meta(
     ids=good_ids,
@@ -117,17 +120,57 @@ result = epoch_multiple_meta(
                                      indir=cleandir,
                                      outdir=join(constants.BASE_DIRECTORY, 'epoched'),
                                      file_id='metapostcue',
-                                     njobs=10,
+                                     njobs=5,
                                      all_trials=all_trials)
 
+#%% Try with stim
+event_dict = {'STIM': 202}
+time_dict = {'tmin': -0.5,'tmax': 4.5,'baseline': None}
+result = epoch_multiple_meta(
+    ids=good_ids,
+                                     event_dict = event_dict,
+                                     time_dict=time_dict,
+                                     indir=cleandir,
+                                     outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                     file_id='metastim',
+                                     njobs=8,
+                                     all_trials=all_trials)
+
+"""
+Alex's note to self
+- nchans not matching on some files during merge - fix
+- small number of epochs -- check all files present
+- manually fix some 
+"""
+
+
+
+#%%
+result_e = [(ind, i[2]) for ind, i in enumerate(result) if i[2] != False]
+error_ids = [good_ids[i[0]] for i in result_e]
 #%% mop up and manually align error trials
 epodir = join(constants.BASE_DIRECTORY, 'epoched')
-check = [i for i in listdir(epodir) if 'metapostcue' in i]
+check = [i for i in listdir(epodir) if 'metastim' in i]
 
-checklist = []
+checklength= []
 for file in check:
-    epo = mne.epochs.read_epochs(join(epodir, file))
-    try:
-        checklist.append([(epo[i]._name, int(epo[i].metadata.cue_dir)) for i in range(len(epo))])
-    except:
-        checklist.append([])
+    epo = mne.epochs.read_epochs(join(epodir, file), preload=False)
+    tlen = len(all_trials[all_trials.id == file.split('_')[0]]) -4
+    elen = len(epo)
+    checklength.append((tlen,elen))
+
+#%% filter and downsample the above
+output = joblib.Parallel(n_jobs=15)(
+        joblib.delayed(epoch_downsample)(file,epodir, 0, 45, 200, False) for files in check
+)
+
+#%%
+for file in check:
+    out = epoch_downsample(file, epodir, 0, 45, 200, False)
+
+#%%
+alls = [i for i in checklength if i[0] <= i[1]]
+bads =  [i for i in checklength if i[0] > i[1]]
+bdiff = [i[0] - i[1] for i in bads]
+
+total_loss = np.sum(bdiff) / (np.sum([i[0] for i in alls]) + np.sum([i[0] for i in bads]))
