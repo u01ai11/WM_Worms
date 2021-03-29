@@ -287,3 +287,52 @@ def plot_MaxLog(logpath, outpath, plot=False):
     #         ])
     summary = np.array([es,gs,vs,rs])
     return summary
+
+def maxfilt_mne_bulk(files, indir, outdir, scriptpath, pythonpath):
+
+    # get preprocess individual function as text
+    for i in range(len(files)):
+        pythonf = f"""
+from os.path import join
+from os import listdir
+import numpy as np
+import mne
+from mne.preprocessing import find_bad_channels_maxwell
+
+ctc = '/imaging/local/software/neuromag/databases/ctc/ct_sparse.fif'
+ss_cal = '/imaging/local/software/neuromag/databases/sss/sss_cal.dat'
+
+print('{files[i]}')
+raw = mne.io.read_raw_fif(join('{indir}','{files[i]}'))
+
+raw.info['bads'] = []
+raw_check = raw.copy()
+auto_noisy_chs, auto_flat_chs, auto_scores  = find_bad_channels_maxwell(
+    raw_check, cross_talk=ctc, calibration=ss_cal,
+    return_scores=True, verbose=False)
+bads = raw.info['bads'] + auto_noisy_chs + auto_flat_chs
+raw.info['bads'] = bads
+chpi_amplitudes = mne.chpi.compute_chpi_amplitudes(raw, verbose=False)
+chpi_locs = mne.chpi.compute_chpi_locs(raw.info, chpi_amplitudes, verbose=False)
+head_pos = mne.chpi.compute_head_pos(raw.info, chpi_locs, verbose=False)
+raw_sss = mne.preprocessing.maxwell_filter(
+    raw, cross_talk=ctc, calibration=ss_cal, verbose=False,
+    head_pos=head_pos, destination=(0,0,0.04), coord_frame='head',
+    regularize='in', st_duration=10, st_correlation=0.98
+    )
+raw_sss.save(join('{outdir}', '{files[i]}'), overwrite=True)
+np.save(join('{outdir}', '{files[i].split('.')[0]+'_pos.npy'}'), head_pos)
+            """
+        # save to file
+        print(pythonf, file=open(f'{scriptpath}/maxfiltmne_{i}.py', 'w'))
+
+        # construct csh file
+        tcshf = f"""#!/bin/tcsh
+{pythonpath} {scriptpath}/maxfiltmne_{i}.py
+                    """
+        # save to directory
+        print(tcshf, file=open(f'{scriptpath}/maxfiltmne_{i}.csh', 'w'))
+
+        # execute this on the cluster
+        os.system(f'sbatch --job-name=maxfilt2mne_{i} --mincpus=5 -t 0-12:00 {scriptpath}/maxfiltmne_{i}.csh')
+

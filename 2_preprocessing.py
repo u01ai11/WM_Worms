@@ -28,7 +28,7 @@ except:
 ##############################
 #%% 2. Filtering & Denoising #
 ##############################
-maxpath=join(constants.BASE_DIRECTORY, 'MaxFiltered')
+maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_mne')
 flist = [f for f in listdir(maxpath) if 'fif' in f]
 indir = maxpath
 outdir = join(constants.BASE_DIRECTORY, 'cleaned')
@@ -81,13 +81,15 @@ i = 0
 # CHANGE THIS TO WHEREVER YOUR PLOTS ARE BEING SAVED
 plot_out = '/home/ai05/'
 #%% RUN THIS BLOCK THE FIRST TIME
+i = 11
 f = man_ica[i]
 raw = mne.io.read_raw_fif(f'{outdir}/{f}', preload=True)
+raw.plot(start=120).savefig('/home/ai05/raw1.png')
+#%%
 ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
 comps = ica.plot_components()
 comps[0].savefig(f'{plot_out}comp1.png')
 comps[1].savefig(f'{plot_out}comp2.png')
-raw.plot(start=120).savefig('/home/ai05/raw1.png')
 print(man_ica[i])
 #%% REPEAT THE BLOCKS BELOW FOR EACH FILE
 raw.save(f'{outdir}/{f.split("_")[0]}_{f.split("_")[1]}_clean_raw.fif', overwrite=True)

@@ -62,45 +62,36 @@ for _id in probe_ids:
 all_trials['offset'] = all_trials['targ_ang'] - all_trials['resp_ang']
 all_trials['offset'] = all_trials['offset'].astype('float')
 all_trials['offset_abs'] = all_trials['offset'].abs()
-all_trials['cue_type'] = ['neutral' if i == 0 else 'valid' for i in all_trials['cue_dir']]
+all_trials['cue_type'] = ['neutral' if i == -1 else 'valid' for i in all_trials['cue_dir']]
 rolling_tmp = [all_trials[all_trials['id'] == i]['offset_abs'].rolling(25).mean() for i in all_trials['id'].unique()]
 rolling_mean = []
 for i in rolling_tmp:
     rolling_mean = rolling_mean + list(i)
 all_trials['rolling_offset'] = rolling_mean
+
+
+#%% Make a distplot for cued and non-cued
+sns.displot(all_trials, x='perc_diff', hue='cue_type', kind='kde', common_norm=False, fill=True)
+plt.show()
+
+
 #%% Compare accuracy for cued vs non-cued trials
 
 # Within subjects ANOVA
-dv = 'resp_onset'#'perc_diff'
-grp = 'cue_dir'
+dv = 'perc_diff'#'perc_diff'
+grp = 'cue_type'
 per_part = all_trials.groupby(['id', grp]).mean()
 per_part = per_part.reset_index()
-model = anova.AnovaRM(all_trials, depvar=dv,
-                      subject='id', within=[grp], aggregate_func='mean')
-res = model.fit()
-print(res)
 
-#posthocs
-left = np.array(per_part[per_part['cue_dir'] == -1][dv])
-right = np.array(per_part[per_part['cue_dir'] == -1][dv])
-neutral = np.array(per_part[per_part['cue_dir'] == -1][dv])
-
-l_r = weightstats.ttost_paired(left,right)
-
-
-plt.close('all')
-ax = sns.barplot(x=grp, y=dv, data=per_part,
-                 linewidth=2.5, facecolor=(1, 1, 1, 0),
-                 errcolor=".2", edgecolor=".2", ci='sd', capsize=0.2)
-sns.stripplot(x=grp, y=dv, data=per_part, zorder=1,
-              size=2, jitter=0.4,ax=ax)
-
+sns.displot(per_part, x='offset', hue='cue_type', kind='kde', common_norm=False, fill=True)
 plt.show()
 
+sns.barplot(data=per_part, y='offset', x='cue_type')
+plt.show()
 #%% over time
 plt.close('all')
 #sns.lineplot(y='rolling_offset', x='trialnr', hue='id', data=all_trials, legend=False)
-sns.lineplot(y='rolling_offset', x='trialnr', hue='cue_dir',data=all_trials)
+sns.lineplot(y='rolling_offset', x='trialnr', hue='cue_type',data=all_trials)
 plt.show()
 
 #%% does average peformance predict WM assessments?

@@ -164,6 +164,9 @@ output = joblib.Parallel(n_jobs=15)(
         joblib.delayed(epoch_downsample)(file,epodir, 0, 45, 200, False) for files in check
 )
 
+scriptdir = join(constants.BASE_DIRECTORY, 'b_scripts')
+pythonpath = '/home/ai05/.conda/envs/mne_2/bin/python'
+epoch_downsample_cluster(check, epodir, 0, 45, 200, False, scriptdir, pythonpath)
 #%%
 for file in check:
     out = epoch_downsample(file, epodir, 0, 45, 200, False)

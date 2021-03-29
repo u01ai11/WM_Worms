@@ -310,11 +310,12 @@ def epoch_downsample_cluster(files, epodir, high, low, rate, savgol, scriptdir, 
 
     _tracker = 0
     for file in files:
+        _tracker+=1
         pycom = f"""
 import sys
 sys.path.insert(0, '/home/ai05/WM_Worms')
 from REDTools import epoch
-epoch.epoch_downsample('{join(file,epodir)}', {high}, {low}, {rate}, {savgol})
+epoch.epoch_downsample('{file}','{epodir}', {high}, {low}, {rate}, {savgol})
                     """
         # save to file
         print(pycom, file=open(join(scriptdir, f'{_tracker}_epoch.py'), 'w'))
