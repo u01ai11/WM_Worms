@@ -661,3 +661,20 @@ while not aligned:
             break
 #%%
 print(epo['N_CUE'].metadata.cue_dir)
+
+#%%
+
+raw = mne.io.read_raw_fif(join(maxpath,flist[0]), preload=True)
+raw.notch_filter(np.arange(50, 241, 50), filter_length='auto',
+                 phase='zero')
+raw.filter(0.1, 75)
+
+ica = mne.preprocessing.ICA(n_components=24, method='picard').fit(raw)
+
+eog_epochs = mne.preprocessing.create_eog_epochs(raw)  # get epochs of eog (if this exists)
+eog_inds, eog_scores = ica.find_bads_eog(eog_epochs)
+ica.exclude.extend(eog_inds)
+
+ecg_epochs = mne.preprocessing.create_ecg_epochs(raw)  # get epochs of eog (if this exists)
+ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
+ica.exclude.extend(ecg_inds)

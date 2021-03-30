@@ -94,21 +94,26 @@ def __preprocess_individual(file, outdir, overwrite):
     """
     save_file_path = ""
 
-    f_only = os.path.basename(file).split('_')  # get filename parts seperated by _
-    num = f_only[0]
+    num =  os.path.basename(file).split('_')[0]
+    if os.path.basename(file).split('raw')[1] != '.fif':
+        append =os.path.basename(file).split('raw')[1].split('.fif')[0]
+    else:
+        append = ''
+
+    append = 'raw' + append + '.fif'
 
     base = os.path.basename(file).split('.')[0]
     # check if any of these files exists, if not overwrite then skip and return path
     # could be any of these names
-    check_fnames = [f'{outdir}/{num}_{f_only[2]}_noeog_noecg_clean_raw.fif',
-                    f'{outdir}/{num}_{f_only[2]}_noecg_clean_raw.fif',
-                    f'{outdir}/{num}_{f_only[2]}_noeog_clean_raw.fif',
-                    f'{outdir}/{num}_{f_only[2]}_clean_raw.fif']
+    check_fnames = [f'{outdir}/{num}_noeog_noecg_clean_{append}',
+                    f'{outdir}/{num}_noecg_clean_{append}',
+                    f'{outdir}/{num}_noeog_clean_{append}',
+                    f'{outdir}/{num}_clean_{append}']
 
     if np.any([os.path.isfile(f) for f in check_fnames]):
         index = np.where([os.path.isfile(f) for f in check_fnames])[0]
         if not overwrite:
-            print(f'file for {num} run {f_only[2]} already exists, skipping to next')
+            print(f'file for {os.path.basename(file)}  already exists, skipping to next')
             save_file_path = check_fnames[index[0]]
             return save_file_path
 
@@ -119,14 +124,15 @@ def __preprocess_individual(file, outdir, overwrite):
         print('could not read ' + file)
         return ''
 
-    raw.filter(1, None)
-    raw.notch_filter(freqs=np.arange(50, 75, 50))
+    raw.filter(0.1, None)
+    raw.notch_filter(np.arange(50, 241, 50), filter_length='auto',
+                     phase='zero')
     # Run ICA on raw data to find blinks and eog
     try:
-        ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
+        ica = mne.preprocessing.ICA(n_components=25, method='picard').fit(raw)
     except:
         raw.crop(1) # remove the first second due to NaNs
-        ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
+        ica = mne.preprocessing.ICA(n_components=25, method='picard').fit(raw)
 
     try:
         # look for and remove EOG
@@ -138,15 +144,14 @@ def __preprocess_individual(file, outdir, overwrite):
         no_eog_removed = False
 
         # if we have identified something !
-        if np.any([abs(i) >= 0.2 for i in eog_scores]):
-            ica.exclude.extend(eog_inds[0:3])
-
+        if len(eog_inds) >0 :
+            ica.exclude.extend(eog_inds)
         else:
-            print(f'{num} run {f_only[2]} cannot detect eog automatically manual ICA must be done')
+            print(f'{os.path.basename(file)} cannot detect eog automatically manual ICA must be done')
             no_eog_removed = True
 
     except:
-        print(f'{num} run {f_only[2]} cannot detect eog automatically manual ICA must be done')
+        print(f'{os.path.basename(file)} cannot detect eog automatically manual ICA must be done')
         no_eog_removed = True
 
     # now we do this with hearbeat
@@ -156,27 +161,27 @@ def __preprocess_individual(file, outdir, overwrite):
 
         # if one component reaches above threshold then remove components automagically
         if len(ecg_inds) > 0:
-            ica.exclude.extend(ecg_inds[0:3])  # exclude top 3 components
-            ica.apply(inst=raw)  # apply to raw
+            ica.exclude.extend(ecg_inds)  # exclude top 3 components
 
         else:  # flag for manual ICA inspection and removal
-            print(f'{num} run {f_only[2]} cannot detect ecg automatically manual ICA must be done')
+            print(f'{os.path.basename(file)} cannot detect ecg automatically manual ICA must be done')
             no_ecg_removed = True
-            ica.apply(inst=raw)
     except:
-        print(f'{num} run {f_only[2]} cannot detect ecg automatically manual ICA must be done')
+        print(f'{os.path.basename(file)} cannot detect ecg automatically manual ICA must be done')
         no_ecg_removed = True
-        ica.apply(inst=raw)
 
+    # exclude all labelled components
+    raw = ica.apply(inst=raw)
     # save the file
     if no_ecg_removed and no_eog_removed:
-        outfname = f'{outdir}/{base}_noeog_noecg_clean_raw.fif'
+        outfname = f'{outdir}/{num}_noeog_noecg_clean_{append}'
+
     elif no_ecg_removed:
-        outfname = f'{outdir}/{base}_noecg_clean_raw.fif'
+        outfname = f'{outdir}/{num}_noecg_clean_{append}'
     elif no_eog_removed:
-        outfname = f'{outdir}/{base}_noeog_clean_raw.fif'
+        outfname = f'{outdir}/{num}_noeog_clean_{append}'
     else:
-        outfname = f'{outdir}/{base}_clean_raw.fif'
+        outfname = f'{outdir}/{num}_clean_{append}'
 
     raw.save(outfname, overwrite=overwrite)
     save_file_path = outfname
@@ -318,7 +323,7 @@ head_pos = mne.chpi.compute_head_pos(raw.info, chpi_locs, verbose=False)
 raw_sss = mne.preprocessing.maxwell_filter(
     raw, cross_talk=ctc, calibration=ss_cal, verbose=False,
     head_pos=head_pos, destination=(0,0,0.04), coord_frame='head',
-    regularize='in', st_duration=10, st_correlation=0.98
+    regularize='in', st_duration=10, st_correlation=0.98, bad_condition = 'ignore'
     )
 raw_sss.save(join('{outdir}', '{files[i]}'), overwrite=True)
 np.save(join('{outdir}', '{files[i].split('.')[0]+'_pos.npy'}'), head_pos)
@@ -334,5 +339,5 @@ np.save(join('{outdir}', '{files[i].split('.')[0]+'_pos.npy'}'), head_pos)
         print(tcshf, file=open(f'{scriptpath}/maxfiltmne_{i}.csh', 'w'))
 
         # execute this on the cluster
-        os.system(f'sbatch --job-name=maxfilt2mne_{i} --mincpus=5 -t 0-12:00 {scriptpath}/maxfiltmne_{i}.csh')
+        os.system(f'sbatch --job-name=maxfilt3mne_{i} --mincpus=5 -t 0-12:00 {scriptpath}/maxfiltmne_{i}.csh')
 
