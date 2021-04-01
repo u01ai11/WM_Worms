@@ -16,7 +16,7 @@ from os.path import join
 ## 'b_scripts'
 ## 'b_logs'
 #
-BASE_DIRECTORY = join('/imaging', 'ai05', 'RED', 'RED_MEG', 'worms')
+BASE_DIRECTORY = join('/imaging', 'astle', 'users', 'ai05', 'RED', 'RED_MEG', 'worms')
 
 # List of participants we want to include in analysis
 PARTICIPANTS = ['99107', '99014', '99091', '99016', '99068', '99013', '99003',

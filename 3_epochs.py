@@ -131,7 +131,7 @@ result = epoch_multiple_meta(
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
-                                     outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                     outdir=join(constants.BASE_DIRECTORY, 'new_epochs'),
                                      file_id='metastim',
                                      njobs=8,
                                      all_trials=all_trials)
@@ -166,10 +166,24 @@ output = joblib.Parallel(n_jobs=15)(
 
 scriptdir = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = '/home/ai05/.conda/envs/mne_2/bin/python'
-epoch_downsample_cluster(check, epodir, 0, 45, 200, False, scriptdir, pythonpath)
+epoch_downsample_cluster(check, epodir, 0, 65, 200, False, scriptdir, pythonpath)
+
+
+
 #%%
 for file in check:
     out = epoch_downsample(file, epodir, 0, 45, 200, False)
+
+#%% read and align epochs
+
+epodir = join(constants.BASE_DIRECTORY, 'epoched')
+epo_files = [i for i in listdir(epodir) if 'metastim' in i]
+posdir = join(constants.BASE_DIRECTORY, 'maxfilter_mne')
+outdir = join(constants.BASE_DIRECTORY, 'epochs_aligned')
+save = True
+
+evoked_mne = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(align_epoch)(file, epodir, posdir, outdir, save) for file in epo_files)
 
 #%%
 alls = [i for i in checklength if i[0] <= i[1]]

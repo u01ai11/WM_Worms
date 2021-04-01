@@ -20,6 +20,7 @@ import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
+import copy
 try:
     import constants
     from REDTools import epoch
@@ -29,6 +30,147 @@ except:
     sys.path.insert(0, '/home/ai05/WM_Worms')
     import constants
 
+
+
+#%% try using .pos to realign epochs
+unaligned = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
+unaligned_ps = [i.split('_')[0] for i in unaligned]
+
+
+#%% get files
+epodir = join(constants.BASE_DIRECTORY, 'epoched')
+files = [i for i in listdir(epodir) if 'metastim' in i]
+ids = [i.split('_')[0] for i in files]
+
+#%% just look at group average with visual evoked
+
+# First read in the files
+def get_epochs(file,dir):
+    #load in epochs
+    _id = file.split('_')[0]
+    epochs = mne.epochs.read_epochs(join(dir, file))
+    epochs.pick_types(meg=True)
+    epochs.crop(tmin=-0.5, tmax=1)
+    epochs.apply_baseline(baseline=(None, 0))
+    #evoked = epochs.average()
+    return epochs
+
+epochs_list = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(get_epochs)(file,epodir) for file in files)
+
+
+#%%
+i = 1
+invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
+fsdir = '/imaging/ai05/RED/RED_MEG/resting/STRUCTURALS/FS_SUBDIR'
+method = "MNE"
+snr = 3
+lambda2 = 1. / snr ** 2
+
+
+
+#find inverse operator and apply
+_id = files[i].split('_')[0]
+
+if _id in unaligned_ps:
+    posdir = join(constants.BASE_DIRECTORY, 'maxfilter_mne')
+    outdir = join(constants.BASE_DIRECTORY, 'epochs_aligned')
+    pos_files = [i for i in listdir(posdir) if 'pos' in i]
+    _id_pos = [i for i in pos_files if _id in i]  # id files
+    _id_pos = sorted(_id_pos, reverse=True)  # sort to have numerical files after
+    # load in all head positions
+    head_pos = np.load(join(posdir, _id_pos[0]))
+    evoked = mne.epochs.average_movements(epochs_list[i], head_pos=head_pos, orig_sfreq=1000,destination=(0, 0, 0.04))
+else:
+    evoked = epochs_list[i].average()
+
+
+
+evoked.plot_joint()
+
+# get inverse
+invf = [i for i in listdir(invdir) if _id in i]
+inv = mne.minimum_norm.read_inverse_operator(join(invdir, invf[0]))
+stc = mne.minimum_norm.apply_inverse(evoked, inv, lambda2,
+                                     method=method, pick_ori=None)
+
+#find files for plotting (i.e. surfaces)
+surfer_kwargs = dict(
+    hemi='rh', subjects_dir=fsdir, views = 'lat',
+    initial_time=0.235, time_unit='s', size=(800, 800), smoothing_steps=5, backend='matplotlib')
+stc.plot(**surfer_kwargs)
+
+surfer_kwargs = dict(
+    hemi='lh', subjects_dir=fsdir, views = 'lat',
+    initial_time=0.235, time_unit='s', size=(800, 800), smoothing_steps=5, backend='matplotlib')
+stc.plot(**surfer_kwargs)
+#%% inver one by one
+invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
+method = "mne"
+snr = 1.5
+lambda2 = 1. / snr ** 2
+for i in range(len(epochs_list)):
+    evoked = epochs_list[i].average()
+    _id = files[i].split('_')[0]
+    invf = [i for i in listdir(invdir) if _id in i]
+    inv = mne.minimum_norm.read_inverse_operator(join(invdir,invf[0]))
+    stc = mne.minimum_norm.apply_inverse(evoked, inv, lambda2,
+                        method=method, pick_ori=None)
+
+
+# get all the files
+epodir = join(constants.BASE_DIRECTORY, 'epoched')
+epo_files = [i for i in listdir(epodir) if 'metastim' in i]
+pos_files = [i for i in listdir(join(constants.BASE_DIRECTORY, 'maxfilter_mne')) if 'pos' in i]
+# flag if contains unaligned epochs
+aligned_epo = [i.split('_')[0] in unaligned_ps for i in epo_files]
+
+epos = []
+for file in epo_files:
+    epo = mne.read_epochs(join(epodir,file))
+    start_nchan = copy.deepcopy(epo.info['nchan'])
+    epo.pick_types(meg=True)
+    # get ID
+    if epo.info['nchan'] != 330:
+        _id = file.split('_')[0]
+        _id_pos = [i for i in pos_files if _id in i]
+        head_pos = np.load(join(constants.BASE_DIRECTORY, 'maxfilter_mne',_id_pos[0]))
+        _e_data = np.zeros((len(epo), 306, 1000))
+        for i in range(len(epo)):
+            _ev = mne.epochs.average_movements(epo[i], head_pos=head_pos)
+            _e_data[i,:,:] = _ev.data
+        _al_epo = mne.EpochsArray(_e_data, epo.info, epo.events, epo.tmin, epo.event_id)
+        epos.append(_al_epo)
+    else:
+        epos.append(epo)
+
+#%%
+def align_epoch(epo):
+    """
+    Align epochs using headposition array (maxfilters and aligns epoch individually)
+    :param epo:
+    :return:
+    """
+    epo.pick_types(meg=True) # only mags
+    _id = file.split('_')[0] # id
+    _id_pos = [i for i in pos_files if _id in i] # id files
+    _id_pos = sorted(_id_pos) # sort to have numerical files after
+    # load in all head positions
+    head_pos = np.load(join(constants.BASE_DIRECTORY, 'maxfilter_mne', _id_pos[0]))
+    if len(_id_pos) > 1:
+        for i in range(1,len(head_pos)):
+            tmp_pos = np.load(join(constants.BASE_DIRECTORY, 'maxfilter_mne', _id_pos[i]))
+            head_pos = np.append([head_pos, tmp_pos], axis=0)
+    # loop through and align each epochs into this data file
+    _e_data = np.zeros((len(epo), 306, 1000))
+    for i in range(len(epo)):
+        _ev = mne.epochs.average_movements(epo[i], head_pos=head_pos)
+        _e_data[i, :, :] = _ev.data
+    # create the object again with new data
+    _al_epo = mne.EpochsArray(_e_data, epo.info, epo.events, epo.tmin, epo.event_id)
+
+    #return the common-space aligned epoch
+    return _al_epo
 #%% load in participant epochs to check probe
 epodir = join(constants.BASE_DIRECTORY, 'epoched')
 probe_files =[f for f in listdir(epodir) if 'probe' in f]

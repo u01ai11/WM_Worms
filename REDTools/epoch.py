@@ -350,3 +350,45 @@ def epoch_downsample(eponame,epodir, high, low, rate, savgol):
 
     return eponame
 
+def align_epoch(file, epodir, posdir, outdir, save):
+    """
+    Align epochs using headposition array (maxfilters and aligns epoch individually)
+    :param: file: the file of the epoch
+    :param: epodir: the directory of that file
+    :param: posdir: the directory of corresponding scan positions
+    :param: outdir: directory for saving
+    :param: save: boolean, to save our return the epoch?
+    :return:
+    """
+
+    try:
+        epo = mne.read_epochs(join(epodir, file)) # read in the file
+        epo.pick_types(meg=True) # only mags
+        _id = file.split('_')[0] # id
+        pos_files = [i for i in listdir(posdir) if 'pos' in i]
+        _id_pos = [i for i in pos_files if _id in i] # id files
+        if len(_id_pos) == 0:
+            return
+        _id_pos = sorted(_id_pos, reverse=True) # sort to have numerical files after
+        # load in all head positions
+        head_pos = np.load(join(posdir, _id_pos[0]))
+        if len(_id_pos) > 1:
+            for i in range(1,len(_id_pos)):
+                tmp_pos = np.load(join(posdir,_id_pos[i]))
+                head_pos = np.concatenate([head_pos, tmp_pos], axis=0)
+        # loop through and align each epochs into this data file
+        _e_data = np.zeros((len(epo), 306, 1000))
+        for i in range(len(epo)):
+            _ev = mne.epochs.average_movements(epo[i], head_pos=head_pos)
+            _e_data[i, :, :] = _ev.data
+        # create the object again with new data
+        _al_epo = mne.EpochsArray(_e_data, epo.info, epo.events, epo.tmin, epo.event_id)
+
+        if save == True:
+            _al_epo.save(join(outdir, file), overwrite=True)
+        #return the common-space aligned epoch
+        return _al_epo
+    except:
+        error = traceback.format_exc()
+        print(error)
+        return error

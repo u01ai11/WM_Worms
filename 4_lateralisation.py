@@ -35,8 +35,39 @@ except:
 
 #%% get files
 epodir = join(constants.BASE_DIRECTORY, 'epoched')
-check = [i for i in listdir(epodir) if 'metastim' in i]
-ids = [i.split('_')[0] for i in check]
+files = [i for i in listdir(epodir) if 'metastim' in i]
+ids = [i.split('_')[0] for i in files]
+
+#%% just look at group average with visual evoked
+
+# First read in the files
+def get_epochs(file,dir):
+    #load in epochs
+    _id = file.split('_')[0]
+    epochs = mne.epochs.read_epochs(join(dir, file))
+    epochs.pick_types(meg=True)
+    epochs.crop(tmin=-0.5, tmax=1)
+    epochs.apply_baseline(baseline=(None, 0))
+    #evoked = epochs.average()
+    return epochs
+
+epochs_list = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(get_epochs)(file,epodir) for file in files)
+
+#%%
+include = []
+for i in range(len(epochs_list)):
+    e = copy.deepcopy(epochs_list[i])
+    e.pick_types(meg='mag')
+    e.average().plot_joint()
+    print("keep (1) or chuck (anything)...?")
+    resp = sys.stdin.read()
+    if resp.split('\n')[0] == '1':
+        include.append(i)
+    else:
+        continue
+
+
 
 #%% try on one file
 file = check[1]

@@ -35,16 +35,19 @@ outdir = join(constants.BASE_DIRECTORY, 'cleaned')
 scriptpath = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = constants.PYTHON_PATH
 overwrite = True
+#%%
 preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, constants.REPO_PATH)
 
 #%% check output
-started = listdir(maxpath)
+started = [i for i in listdir(maxpath) if '.fif' in i]
 done = listdir(outdir)
-extension_names =  ['noeog_noecg_clean_raw.fif','noecg_clean_raw.fif',
-                    'noeog_clean_raw.fif','clean_raw.fif']
+extension_names =  ['_noeog_noecg_clean_','_noeog_clean_',
+                    '_noecg_clean','_clean_']
 success = []
 for file in started:
-    poslist = [f'{file.split(".")[0]}_{i}' for i in extension_names]
+    poslist = [[f'{os.path.basename(file).split("_")[0]}{i}{ext}' for i in extension_names] for ext in ['raw.fif', 'raw-1.fif']]
+    poslist = poslist[0] + poslist[1]
+    print(poslist)
     match = [i in done for i in poslist]
     success.append(np.sum(match))
 
@@ -81,32 +84,52 @@ i = 0
 # CHANGE THIS TO WHEREVER YOUR PLOTS ARE BEING SAVED
 plot_out = '/home/ai05/'
 #%% RUN THIS BLOCK THE FIRST TIME
-i = 11
+i =0
 f = man_ica[i]
 raw = mne.io.read_raw_fif(f'{outdir}/{f}', preload=True)
 raw.plot(start=120).savefig('/home/ai05/raw1.png')
 #%%
-ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
+#raw.filter(1,75)
+ica = mne.preprocessing.ICA(method='picard', n_components=15).fit(raw,decim=25)
+
+#ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw,decim=25)
+#ica = mne.preprocessing.ICA(method='picard').fit(raw)
 comps = ica.plot_components()
 comps[0].savefig(f'{plot_out}comp1.png')
 comps[1].savefig(f'{plot_out}comp2.png')
 print(man_ica[i])
 #%% REPEAT THE BLOCKS BELOW FOR EACH FILE
-raw.save(f'{outdir}/{f.split("_")[0]}_{f.split("_")[1]}_clean_raw.fif', overwrite=True)
+num = os.path.basename(f).split('_')[0]
+if os.path.basename(f).split('raw')[1] != '.fif':
+    append = os.path.basename(f).split('raw')[1].split('.fif')[0]
+else:
+    append = ''
+append = 'raw' + append + '.fif'
+
+if raw is not None:
+    raw.save(f'{outdir}/{num}_clean_{append}', overwrite=True)
+    os.remove(f'{outdir}/{f}')
+
 i +=1
 print(f'{i+1} out of {len(man_ica)}')
 f = man_ica[i]
 raw = mne.io.read_raw_fif(f'{outdir}/{f}', preload=True)
-ica = mne.preprocessing.ICA(n_components=25, method='fastica').fit(raw)
-comps = ica.plot_components()
-comps[0].savefig(f'{plot_out}comp1.png')
-comps[1].savefig(f'{plot_out}comp2.png')
-raw.plot(start=120).savefig(f'{plot_out}raw1.png')
-print(man_ica[i])
+if len(raw)/1000 < 60:
+    print('file to small, delete!')
+    del(raw)
+    os.remove(f'{outdir}/{f}')
+else:
+    raw.plot(start=120).savefig(f'{plot_out}raw1.png')
+    ica = mne.preprocessing.ICA(n_components=25, method='picard').fit(raw,decim=25)
+    comps = ica.plot_components()
+    #comps[0].savefig(f'{plot_out}comp1.png')
+    #comps[1].savefig(f'{plot_out}comp2.png')
+    ica.plot_sources(raw,start=120, show_scrollbars=False)
+    print(man_ica[i])
 #%% SELECT THE COMPONENTS HERE
 # change inds and decide
-ica.exclude =[1]
-ica.apply(raw)
+ica.exclude =[2,9]
+raw = ica.apply(raw)
 # if you need to plot the channels
 # CHECK THE PLOT TO SEE IF YOU PICKED A GOOD INDEX
 # NOTE: you may need to change the start time
