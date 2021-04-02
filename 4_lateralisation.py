@@ -24,6 +24,7 @@ import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
+from mpl_toolkits.mplot3d import Axes3D
 try:
     import constants
     from REDTools import epoch
@@ -34,6 +35,11 @@ except:
     import constants
 
 #%% get files
+invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
+fsdir = '/imaging/astle/users/ai05/RED/RED_MEG/resting/STRUCTURALS/FS_SUBDIR'
+method = "MNE"
+snr = 3
+lambda2 = 1. / snr ** 2
 epodir = join(constants.BASE_DIRECTORY, 'epoched')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
@@ -58,8 +64,18 @@ epochs_list = joblib.Parallel(n_jobs=15)(
 include = []
 for i in range(len(epochs_list)):
     e = copy.deepcopy(epochs_list[i])
-    e.pick_types(meg='mag')
-    e.average().plot_joint()
+    evoked = e.average()
+    evoked.plot_joint()
+    _id = files[i].split('_')[0]
+    # get inverse
+    invf = [i for i in listdir(invdir) if _id in i]
+    inv = mne.minimum_norm.read_inverse_operator(join(invdir, invf[0]))
+    stc = mne.minimum_norm.apply_inverse(evoked, inv, lambda2,
+                                         method=method, pick_ori=None)
+    surfer_kwargs = dict(
+        hemi='lh', subjects_dir=fsdir, views = 'lat',
+        initial_time=stc.get_peak()[1], time_unit='s', size=(800, 800), smoothing_steps=5, backend='matplotlib')
+    stc.plot(**surfer_kwargs)
     print("keep (1) or chuck (anything)...?")
     resp = sys.stdin.read()
     if resp.split('\n')[0] == '1':

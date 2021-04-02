@@ -25,12 +25,13 @@ except:
 #%% 1. MAXFILTER RAW FILES #
 ############################
 
+trans2 = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
 for file in listdir(join(constants.BASE_DIRECTORY, 'raw')):
     fpath = join(constants.BASE_DIRECTORY, 'raw', file)
     max_opts = dict(max_cmd = 'maxfilter_2.2.12',
         f = join(fpath),
-        o = join(constants.BASE_DIRECTORY, 'MaxFiltered', file),
-        trans = 'default',
+        o = join(constants.BASE_DIRECTORY, 'maxfilter_2', file),
+        trans = trans2,
         frame = 'head',
         regularize = 'in',
         st = '10',
@@ -42,7 +43,8 @@ for file in listdir(join(constants.BASE_DIRECTORY, 'raw')):
         bads_cmd = '',
         lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{file.split(".")[0]}.log'),
         hpi_g = '0.98',
-        hpi_e = '5')
+        hpi_e = '5',
+        hpi_step = '250')
 
     preprocess.maxFilt(cluster=True, **max_opts)
 

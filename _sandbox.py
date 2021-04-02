@@ -30,18 +30,47 @@ except:
     sys.path.insert(0, '/home/ai05/WM_Worms')
     import constants
 
-
+import os
 
 #%% try using .pos to realign epochs
-unaligned = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
-unaligned_ps = [i.split('_')[0] for i in unaligned]
 
+i = 5
+
+rawdir = join(constants.BASE_DIRECTORY, 'raw')
+outdir = join(constants.BASE_DIRECTORY, 'maxfilter_2')
+unaligned = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
+aligned = [i for i in listdir(rawdir) if i not in unaligned]
+[os.path.getsize(join(rawdir,i)) for i in unaligned]
+
+# correct size
+for file in unaligned:
+    raw = mne.io.read_raw_fif(join(rawdir, file))
+    raw.save
+
+#%%
+unaligned_ps = [i.split('_')[0] for i in unaligned]
+trans = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
+lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{unaligned[i].split(".")[0]}.log')
+cmd = f"{'maxfilter_2.2.12'} -f {join(rawdir, unaligned[i])} -o {join(outdir,unaligned[i])}" \
+          f" -trans {trans} -frame {'head'} -regularize {'in'}" \
+          f" -st {'10'} -corr {'0.98'} -origin {'0 0 45'} -movecomp {'inter'} -hpistep {'250'}" \
+          f" -autobad on -force -linefreq 50 | tee {lg}"
 
 #%% get files
 epodir = join(constants.BASE_DIRECTORY, 'epoched')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
 
+#%% read raw
+i = 1
+rawdir = join(constants.BASE_DIRECTORY, 'raw')
+raw = mne.io.read_raw_fif(join(rawdir, unaligned[i]), preload=True)
+
+#%%amp
+amp = mne.chpi.compute_chpi_amplitudes(raw)
+
+#%%
+chpi_locs = mne.chpi.compute_chpi_locs(raw.info, amp)
 #%% just look at group average with visual evoked
 
 # First read in the files
@@ -60,7 +89,7 @@ epochs_list = joblib.Parallel(n_jobs=15)(
 
 
 #%%
-i = 1
+i = 2
 invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
 fsdir = '/imaging/ai05/RED/RED_MEG/resting/STRUCTURALS/FS_SUBDIR'
 method = "MNE"
