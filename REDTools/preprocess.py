@@ -3,6 +3,7 @@ import os
 import numpy as np
 import joblib
 import matplotlib.pyplot as plt
+from os.path import join
 from time import sleep
 import sys
 def preprocess_multiple(flist, indir, outdir, overwrite, njobs):
@@ -61,7 +62,11 @@ def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, 
 
     # get preprocess individual function as text
     for i in range(len(flist)):
-
+        file = flist[i]
+        if '-1.fif' in file or '-2.fif' in file:
+            if os.path.isfile(join(indir, f'{file.split("-")[0]}.fif')):
+                print(f'{file} is second part')
+                return
         pythonf = f"""
 import sys 
 sys.path.insert(0, '{repopath}')
@@ -242,7 +247,7 @@ def maxFilt(cluster=False, **kw):
         tcpath = lg.split('.')[0] + '.tcsh'
         print(tcshf, file=open(tcpath, 'w'))
         # execute this on the cluster
-        os.system(f'sbatch --job-name={os.path.basename(tcpath)} --mincpus=5 -t 0-1:00 {tcpath} -constraint=maxfilter ')
+        os.system(f'sbatch --job-name={os.path.basename(tcpath)} -t 0-4:00 {tcpath} --constraint="maxfilter"')
     else:  # run on current machine
         print(max_cmd)
         os.system(max_cmd)

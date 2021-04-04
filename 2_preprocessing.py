@@ -28,7 +28,7 @@ except:
 ##############################
 #%% 2. Filtering & Denoising #
 ##############################
-maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_mne')
+maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_2')
 flist = [f for f in listdir(maxpath) if 'fif' in f]
 indir = maxpath
 outdir = join(constants.BASE_DIRECTORY, 'cleaned')

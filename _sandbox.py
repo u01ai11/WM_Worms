@@ -34,10 +34,11 @@ import os
 
 #%% try using .pos to realign epochs
 
-i = 5
+i = 0
 
 rawdir = join(constants.BASE_DIRECTORY, 'raw')
-outdir = join(constants.BASE_DIRECTORY, 'maxfilter_2')
+outdir = join(constants.BASE_DIRECTORY, 'maxfilter_2')#
+splitdir = join(constants.BASE_DIRECTORY, 'raw_split')#
 unaligned = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
 aligned = [i for i in listdir(rawdir) if i not in unaligned]
 [os.path.getsize(join(rawdir,i)) for i in unaligned]
@@ -45,13 +46,16 @@ aligned = [i for i in listdir(rawdir) if i not in unaligned]
 # correct size
 for file in unaligned:
     raw = mne.io.read_raw_fif(join(rawdir, file))
-    raw.save
+    raw.save(join(splitdir, file), split_size='1.90GB')
+
 
 #%%
-unaligned_ps = [i.split('_')[0] for i in unaligned]
 trans = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
-lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{unaligned[i].split(".")[0]}.log')
-cmd = f"{'maxfilter_2.2.12'} -f {join(rawdir, unaligned[i])} -o {join(outdir,unaligned[i])}" \
+FILE = join(splitdir,file)
+lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{file(".")[0]}.log')
+
+maxcmd = '/neuro/bin/util/maxfilter-2.2'
+cmd = f"{maxcmd} -f {join(splitdir, unaligned[i])} -o {join(outdir,unaligned[i])}" \
           f" -trans {trans} -frame {'head'} -regularize {'in'}" \
           f" -st {'10'} -corr {'0.98'} -origin {'0 0 45'} -movecomp {'inter'} -hpistep {'250'}" \
           f" -autobad on -force -linefreq 50 | tee {lg}"

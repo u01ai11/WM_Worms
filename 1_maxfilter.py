@@ -11,7 +11,7 @@ from os.path import join
 from os import listdir
 import numpy as np
 import mne
-from mne.preprocessing import find_bad_channels_maxwell
+import joblib
 try:
     import constants
     from REDTools import preprocess
@@ -20,15 +20,31 @@ except:
     sys.path.insert(0, '/home/ai05/WM_Worms/')
     import constants
     from REDTools import preprocess
-
+import os
 ############################
 #%% 1. MAXFILTER RAW FILES #
 ############################
 
+splitdir = join(constants.BASE_DIRECTORY, 'raw_split')#
+rawdir = join(constants.BASE_DIRECTORY, 'raw')
+# First resplit all files to be maxfilter friendly
+
+def split_raw(file):
+    if '-1.fif' in file or '-2.fif' in file:
+        if os.path.isfile(join(rawdir,f'{file.split("-")[0]}.fif')):
+            print(f'{file} is second part')
+            return
+    raw = mne.io.read_raw_fif(join(rawdir, file))
+    raw.save(join(splitdir, file), split_size='1.80GB')
+    print(file)
+    return
+epochs_list = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(split_raw)(file) for file in listdir(rawdir))
+#%%
 trans2 = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
-for file in listdir(join(constants.BASE_DIRECTORY, 'raw')):
-    fpath = join(constants.BASE_DIRECTORY, 'raw', file)
-    max_opts = dict(max_cmd = 'maxfilter_2.2.12',
+for file in listdir(splitdir):
+    fpath = join(splitdir, file)
+    max_opts = dict(max_cmd = '/neuro/bin/util/maxfilter-2.2',
         f = join(fpath),
         o = join(constants.BASE_DIRECTORY, 'maxfilter_2', file),
         trans = trans2,
@@ -44,13 +60,13 @@ for file in listdir(join(constants.BASE_DIRECTORY, 'raw')):
         lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{file.split(".")[0]}.log'),
         hpi_g = '0.98',
         hpi_e = '5',
-        hpi_step = '250')
+        hpi_step = '200')
 
-    preprocess.maxFilt(cluster=True, **max_opts)
+    maxFilt(cluster=True, **max_opts)
 
 #%% check progress
-started = listdir(join(constants.BASE_DIRECTORY, 'raw'))
-done = listdir(join(constants.BASE_DIRECTORY, 'MaxFiltered'))
+started = listdir(splitdir)
+done = listdir(join(constants.BASE_DIRECTORY, 'maxfilter_2'))
 dropped = [i for i in started if i not in done]
 
 #%% check dropped files and then re-run with HPI error allowance
