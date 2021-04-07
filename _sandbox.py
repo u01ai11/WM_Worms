@@ -32,6 +32,9 @@ except:
 
 import os
 
+
+
+
 #%% try using .pos to realign epochs
 
 i = 0
@@ -61,10 +64,43 @@ cmd = f"{maxcmd} -f {join(splitdir, unaligned[i])} -o {join(outdir,unaligned[i])
           f" -autobad on -force -linefreq 50 | tee {lg}"
 
 #%% get files
-epodir = join(constants.BASE_DIRECTORY, 'epoched')
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
 
+file_includes = np.load(join(constants.BASE_DIRECTORY, 'good_visual_evoked.npy'))
+#%% try on one file
+def get_epochs(file,dir):
+    #load in epochs
+    _id = file.split('_')[0]
+    epochs = mne.epochs.read_epochs(join(dir, file))
+    epochs.pick_types(meg=True)
+    epochs.crop(tmin=-0.5, tmax=1)
+    epochs.apply_baseline(baseline=(None, 0))
+    #evoked = epochs.average()
+    return epochs
+i = 5
+method = "dSPM"
+snr = 3
+lambda2 = 1. / snr ** 2
+invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
+fsdir = '/imaging/astle/users/ai05/RED/RED_MEG/resting/STRUCTURALS/FS_SUBDIR'
+
+file = file_includes[i]
+epochs = get_epochs(file, epodir)
+evoked = epochs.average()
+evoked.plot_joint()
+_id = files[i].split('_')[0]
+#get inverse
+invf = [i for i in listdir(invdir) if _id in i]
+inv = mne.minimum_norm.read_inverse_operator(join(invdir, invf[0]))
+stc = mne.minimum_norm.apply_inverse(evoked, inv, lambda2,
+                                     method=method, pick_ori="normal")
+peak_time = stc.get_peak()[1]
+surfer_kwargs = dict(
+    hemi='rh', subjects_dir=fsdir, views = 'lat',
+    initial_time=peak_time, time_unit='s', size=(800, 800), smoothing_steps=5, backend='matplotlib')
+stc.plot(**surfer_kwargs)
 #%% read raw
 i = 1
 rawdir = join(constants.BASE_DIRECTORY, 'raw')

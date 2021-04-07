@@ -34,7 +34,11 @@ indir = maxpath
 outdir = join(constants.BASE_DIRECTORY, 'cleaned')
 scriptpath = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = constants.PYTHON_PATH
-overwrite = True
+overwrite = False
+
+
+exclude = ['128739138']
+flist = [i for i in flist if not any([ii in i for ii in exclude])]
 #%%
 preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, constants.REPO_PATH)
 
@@ -47,7 +51,7 @@ success = []
 for file in started:
     poslist = [[f'{os.path.basename(file).split("_")[0]}{i}{ext}' for i in extension_names] for ext in ['raw.fif', 'raw-1.fif']]
     poslist = poslist[0] + poslist[1]
-    print(poslist)
+    #print(poslist)
     match = [i in done for i in poslist]
     success.append(np.sum(match))
 
@@ -128,7 +132,7 @@ else:
     print(man_ica[i])
 #%% SELECT THE COMPONENTS HERE
 # change inds and decide
-ica.exclude =[2,9]
+ica.exclude =[0,9,10]
 raw = ica.apply(raw)
 # if you need to plot the channels
 # CHECK THE PLOT TO SEE IF YOU PICKED A GOOD INDEX

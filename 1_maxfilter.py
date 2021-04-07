@@ -24,9 +24,9 @@ import os
 ############################
 #%% 1. MAXFILTER RAW FILES #
 ############################
-
 splitdir = join(constants.BASE_DIRECTORY, 'raw_split')#
 rawdir = join(constants.BASE_DIRECTORY, 'raw')
+#%%
 # First resplit all files to be maxfilter friendly
 
 def split_raw(file):
@@ -42,7 +42,8 @@ epochs_list = joblib.Parallel(n_jobs=15)(
     joblib.delayed(split_raw)(file) for file in listdir(rawdir))
 #%%
 trans2 = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
-for file in listdir(splitdir):
+#for file in listdir(splitdir):
+for file in dropped:
     fpath = join(splitdir, file)
     max_opts = dict(max_cmd = '/neuro/bin/util/maxfilter-2.2',
         f = join(fpath),
@@ -90,6 +91,24 @@ for file in dropped:
 np.save(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'), retry, allow_pickle=True)
 
 retry = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
+
+#%% check we can open raw files
+
+for i, file in enumerate(done):
+    fpath = join(constants.BASE_DIRECTORY, 'maxfilter_2',file)
+    size = os.path.getsize(fpath) /100000
+    if size < 10:
+        continue
+    else:
+        raw = mne.io.read_raw_fif(fpath)
+
+#%% check before and after size
+sizes = []
+for i, file in enumerate(done):
+    bef = os.path.getsize(join(splitdir,file)) /100000
+    after = os.path.getsize(join(constants.BASE_DIRECTORY, 'maxfilter_2',file)) /100000
+    sizes.append((file, bef, after))
+
 #%% retry but without movecomp
 for file in retry:
     fpath = join(constants.BASE_DIRECTORY, 'raw', file)

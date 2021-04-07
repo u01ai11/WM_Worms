@@ -14,6 +14,7 @@ import numpy as np
 import mne
 import pandas as pd
 import joblib
+import copy
 try:
     import constants
     from REDTools import epoch
@@ -149,7 +150,7 @@ Alex's note to self
 result_e = [(ind, i[2]) for ind, i in enumerate(result) if i[2] != False]
 error_ids = [good_ids[i[0]] for i in result_e]
 #%% mop up and manually align error trials
-epodir = join(constants.BASE_DIRECTORY, 'epoched')
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs')
 check = [i for i in listdir(epodir) if 'metastim' in i]
 
 checklength= []
@@ -166,28 +167,49 @@ output = joblib.Parallel(n_jobs=15)(
 
 scriptdir = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = '/home/ai05/.conda/envs/mne_2/bin/python'
-epoch_downsample_cluster(check, epodir, 0, 65, 200, False, scriptdir, pythonpath)
+epoch.epoch_downsample_cluster(check, epodir, 0, 65, 200, False, scriptdir, pythonpath)
 
 
+
+#%% Read in and visually inspect the visual evoked response
+
+
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs')
+files = [i for i in listdir(epodir) if 'metastim' in i]
+ids = [i.split('_')[0] for i in files]
+
+#%% just look at group average with visual evoked
+
+# First read in the files
+def get_epochs(file,dir):
+    #load in epochs
+    _id = file.split('_')[0]
+    epochs = mne.epochs.read_epochs(join(dir, file))
+    epochs.pick_types(meg=True)
+    epochs.crop(tmin=-0.5, tmax=1)
+    epochs.apply_baseline(baseline=(None, 0))
+    #evoked = epochs.average()
+    return epochs
+
+epochs_list = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(get_epochs)(file,epodir) for file in files)
 
 #%%
-for file in check:
-    out = epoch_downsample(file, epodir, 0, 45, 200, False)
 
-#%% read and align epochs
 
-epodir = join(constants.BASE_DIRECTORY, 'epoched')
-epo_files = [i for i in listdir(epodir) if 'metastim' in i]
-posdir = join(constants.BASE_DIRECTORY, 'maxfilter_mne')
-outdir = join(constants.BASE_DIRECTORY, 'epochs_aligned')
-save = True
+#%% Loop through and look at the files to determine which are sufficient to proceed with
+include = []
+for i in range(len(epochs_list)):
+    e = copy.deepcopy(epochs_list[i])
+    evoked = e.average()
+    evoked.plot_joint()
+    _id = files[i].split('_')[0]
+    print("keep (1) or chuck (anything)...?")
+    resp = sys.stdin.read()
+    if resp.split('\n')[0] == '1':
+        include.append(i)
+    else:
+        continue
 
-evoked_mne = joblib.Parallel(n_jobs=15)(
-    joblib.delayed(align_epoch)(file, epodir, posdir, outdir, save) for file in epo_files)
-
-#%%
-alls = [i for i in checklength if i[0] <= i[1]]
-bads =  [i for i in checklength if i[0] > i[1]]
-bdiff = [i[0] - i[1] for i in bads]
-
-total_loss = np.sum(bdiff) / (np.sum([i[0] for i in alls]) + np.sum([i[0] for i in bads]))
+file_includes = np.array(files)[include]
+np.save(join(constants.BASE_DIRECTORY, 'good_visual_evoked.npy'), file_includes)

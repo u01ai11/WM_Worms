@@ -63,10 +63,10 @@ def preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, 
     # get preprocess individual function as text
     for i in range(len(flist)):
         file = flist[i]
-        if '-1.fif' in file or '-2.fif' in file:
-            if os.path.isfile(join(indir, f'{file.split("-")[0]}.fif')):
-                print(f'{file} is second part')
-                return
+        # if '-1.fif' in file or '-2.fif' in file:
+        #     if os.path.isfile(join(indir, f'{file.split("-")[0]}.fif')):
+        #         print(f'{file} is second part')
+        #         continue
         pythonf = f"""
 import sys 
 sys.path.insert(0, '{repopath}')
@@ -84,7 +84,7 @@ red_preprocess.__preprocess_individual('{indir}/{flist[i]}', '{outdir}', {overwr
         print(tcshf, file=open(f'{scriptpath}/preproc_{i}.csh', 'w'))
 
         # execute this on the cluster
-        os.system(f'sbatch --job-name=preproc_{i} --mincpus=5 -t 0-1:00 {scriptpath}/preproc_{i}.csh')
+        os.system(f'sbatch --job-name=preproc_{i} --mincpus=5 -t 0-2:00 {scriptpath}/preproc_{i}.csh')
 
 
 def __preprocess_individual(file, outdir, overwrite):
