@@ -164,11 +164,17 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
         epochs = f'{p_id}_{file_id}-epo.fif'
         return epochs, [], False
 
+
+
     try:
         # First we read in epochs from all passed in participant files
         datelist = []
         epolist = []
         for file in part_files:
+            # If file which will be read anyway, skip
+            if '-1.fif' in file or '-2.fif' in file:
+                if os.path.isfile(join(indir, f'{file.split("-")[0]}.fif')):
+                    continue
             raw = mne.io.read_raw_fif(join(indir, file), preload=True)
             datelist.append(raw.info['meas_date'])
             #events = find_events_CBU(raw)
@@ -177,26 +183,23 @@ def epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file
                                 tmax=time_dict['tmax'], baseline=time_dict['baseline'],
                                 preload=True, proj=True)
             epolist.append(epochs)
+            del(raw)
 
 
 
         # if we had more than one, then order them by date and calculate seconds difference for offsetting
-        if len(part_files) > 1:
+        if len(epolist) > 1:
             epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)] # tuples of time and epochs
             epotime = sorted(epotime, key=lambda row: row[0]) # sort epochs
             epolist = [i[1] for i in epotime]
-        if len(part_files) > 1:
+
             epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)] # tuples of time and epochs
             epotime = sorted(epotime, key=lambda row: row[0]) # sort epochs
             time_diffs = [epotime[i+1][0] - epotime[0][0] for i in range(len(epotime)-1)] # workout offset times for all in lists relative to first scan
             for off_ep in range(len(time_diffs)): # now adjust all these epochs (other than first one) to account for offset
                 for i in range(len(epolist[off_ep+1])): # loop through epoch events
                     epolist[off_ep+1].events[i, 0] = epolist[off_ep+1].events[i, 0] + (time_diffs[off_ep] * 1000) # add this offset
-            #make sure nchan the same
-            nchans = [i.info['nchan'] for i in epolist]
-            if len(set(nchans)) > 1:
-                for i in range(len(epolist)):
-                    epolist[i].pick_types(meg=True, chpi=False)
+
             epo = mne.concatenate_epochs(epolist, add_offset=False) # concatenate, disabling MNEs default offsetting
         else:
             epo = epolist[0]

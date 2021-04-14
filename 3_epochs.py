@@ -111,6 +111,8 @@ for _id in ids:
 #%% whittle out poor performers
 trials = [(i, len(all_trials[all_trials.id == i])) for i in good_ids]
 good_ids = [i[0] for i in trials if i[1] > 34]
+
+
 #%% Try with postcue
 event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252}
 time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
@@ -134,7 +136,7 @@ result = epoch_multiple_meta(
                                      indir=cleandir,
                                      outdir=join(constants.BASE_DIRECTORY, 'new_epochs'),
                                      file_id='metastim',
-                                     njobs=8,
+                                     njobs=11,
                                      all_trials=all_trials)
 
 """

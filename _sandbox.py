@@ -805,6 +805,7 @@ for t in trial_ranges: # plot ranges for each trial
 
 #ax.set_xlim(1*60000,6*60000)
 ax.set_ylim(0,3)
+fig.savefig('/home/ai05/diagram.png')
 plt.show()
 #%%
 event_dict = {'L_CUE': 250, 'R_CUE': 251, 'N_CUE': 252}
