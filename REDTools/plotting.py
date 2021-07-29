@@ -286,3 +286,70 @@ def mne_connec(matrix, this_title, fig, *labels):
                                                 textcolor='black')
 
     return fig2, ax
+
+def plot_cluster(time_inds, space_inds, T_obs, evok):
+
+    ch_inds = np.unique(space_inds)
+    time_inds = np.unique(time_inds)
+
+    # get topography for F stat
+    f_map = T_obs[time_inds, ...].mean(axis=0)
+
+    # get signals at the sensors contributing to the cluster
+    sig_times = evok.times[time_inds]
+
+    # create spatial mask
+    mask = np.zeros((f_map.shape[0], 1), dtype=bool)
+    mask[ch_inds, :] = True
+    reg_masks.append(mask)
+    # initialize figure
+    fig, ax_topo = plt.subplots(1, 1, figsize=(10, 3))
+
+    # plot average test statistic and mark significant sensors
+    image, _ = mne.viz.plot_topomap(f_map, pos, mask=mask, axes=ax_topo, ch_type=sen,
+                                    vmin=np.min, vmax=np.max, sphere=sphere, show=False)
+
+    # create additional axes (for ERF and colorbar)
+    divider = make_axes_locatable(ax_topo)
+
+    # add axes for colorbar
+    ax_colorbar = divider.append_axes('right', size='5%', pad=0.05)
+    plt.colorbar(image, cax=ax_colorbar)
+    ax_topo.set_xlabel(
+        'Averaged T-map ({:0.3f} - {:0.3f} s)'.format(*sig_times[[0, -1]]))
+
+    # add new axis for time courses and plot time courses
+    ax_signals = divider.append_axes('right', size='300%', pad=1.2)
+    title = 'Retro-Cue Cluster #{0}, {1} sensor'.format(i_clu + 1, len(ch_inds))
+    if len(ch_inds) > 1:
+        title += "s (mean)"
+    mne.viz.plot_compare_evokeds({'Left': L_E, 'Right': R_E}, title=title, picks=ch_inds, axes=ax_signals,
+                                 colors=colors, show=False,
+                                 split_legend=True, truncate_yaxis='auto', combine='mean')
+
+    ax_signals.set_title(title, y=1.1)
+    # plot temporal cluster extent
+    ymin, ymax = ax_signals.get_ylim()
+    ax_signals.fill_betweenx((ymin, ymax), sig_times[0], sig_times[-1],
+                             color='orange', alpha=0.3)
+
+    xmin, xmax = ax_signals.get_xlim()
+
+    # add labels if needed
+    for i, ev in enumerate(event_labels):
+        if xmin <= event_onsets[i] <= xmax:
+            ax_signals.axvline(event_onsets[i], linestyle='--')
+            ax_signals.text(event_onsets[i], ymax, f'{ev} onset')
+        if xmin <= event_offsets[i] <= xmax:
+            ax_signals.axvline(event_offsets[i], linestyle='--')
+            ax_signals.text(event_offsets[i], ymax, f'{ev} offset')
+
+    ax_signals.set_ylabel('Field Strength (fT)')
+    # clean up viz
+    mne.viz.tight_layout(fig=fig)
+    fig.subplots_adjust(bottom=.05)
+
+    labels = [item.get_text() for item in ax_signals.get_xticklabels()]
+    labels = [str(float(i) - plot_t_offset) for i in labels]
+    ax_signals.set_xticklabels(labels)
+    plt.show()

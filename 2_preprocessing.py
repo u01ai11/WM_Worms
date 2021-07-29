@@ -28,10 +28,10 @@ except:
 ##############################
 #%% 2. Filtering & Denoising #
 ##############################
-maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_2')
-flist = [f for f in listdir(maxpath) if 'fif' in f]
+maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_3')
+flist = [f for f in listdir(maxpath) if 'trans1stdef.fif' in f]
 indir = maxpath
-outdir = join(constants.BASE_DIRECTORY, 'cleaned')
+outdir = join(constants.BASE_DIRECTORY, 'cleaned_cbu')
 scriptpath = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = constants.PYTHON_PATH
 overwrite = False
@@ -39,6 +39,24 @@ overwrite = False
 
 exclude = ['128739138']
 flist = [i for i in flist if not any([ii in i for ii in exclude])]
+
+#%% Manual bad segment and bad file removal
+# unfortunately we have large artefacts in this dataset, so we need to manually label some artefactual segments
+# this is a manual process, as relying on the automated functions below doesn't always work.
+
+# loop through and annotate bad segments in the fif files
+for raw_f in flist:
+    print(f'{flist.index(raw_f)} out of {len(flist)}')
+    raw = mne.io.read_raw_fif(join(maxpath, raw_f), verbose=False)
+    fig = raw.plot()
+    fig.canvas.key_press_event('a')
+    response = input("0 to accept or 1 to reject:")
+    if int(response) == 0:
+        raw.save(join(maxpath, f'{flist[0][0:-16]}_checked.fif'))
+    else:
+        print('toobad!')
+
+
 #%%
 preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, constants.REPO_PATH)
 

@@ -108,6 +108,8 @@ for _id in ids:
     all_trials = all_trials.append(_df, ignore_index=True)
     good_ids.append(_id)
 
+#%% save the all files for later
+all_trials.to_csv(join(constants.BASE_DIRECTORY, 'all_trials.csv'))
 #%% whittle out poor performers
 trials = [(i, len(all_trials[all_trials.id == i])) for i in good_ids]
 good_ids = [i[0] for i in trials if i[1] > 34]
@@ -134,7 +136,7 @@ result = epoch_multiple_meta(
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
-                                     outdir=join(constants.BASE_DIRECTORY, 'new_epochs'),
+                                     outdir=join(constants.BASE_DIRECTORY, 'new_epochs_2'),
                                      file_id='metastim',
                                      njobs=11,
                                      all_trials=all_trials)
@@ -152,7 +154,7 @@ Alex's note to self
 result_e = [(ind, i[2]) for ind, i in enumerate(result) if i[2] != False]
 error_ids = [good_ids[i[0]] for i in result_e]
 #%% mop up and manually align error trials
-epodir = join(constants.BASE_DIRECTORY, 'new_epochs')
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs_2')
 check = [i for i in listdir(epodir) if 'metastim' in i]
 
 checklength= []
@@ -163,13 +165,14 @@ for file in check:
     checklength.append((tlen,elen))
 
 #%% filter and downsample the above
-output = joblib.Parallel(n_jobs=15)(
-        joblib.delayed(epoch_downsample)(file,epodir, 0, 45, 200, False) for files in check
-)
+# uncomment to do locally
+# output = joblib.Parallel(n_jobs=15)(
+#         joblib.delayed(epoch_downsample)(file,epodir, 0, 45, 200, False) for files in check
+# )
 
 scriptdir = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = '/home/ai05/.conda/envs/mne_2/bin/python'
-epoch.epoch_downsample_cluster(check, epodir, 0, 65, 200, False, scriptdir, pythonpath)
+epoch.epoch_downsample_cluster(check, epodir, 1, 80, 250, False, scriptdir, pythonpath)
 
 
 
