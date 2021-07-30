@@ -130,7 +130,7 @@ def __preprocess_individual(file, outdir, overwrite):
         return ''
 
     raw.filter(0.1, None)
-    raw.notch_filter(np.arange(50, 241, 50), filter_length='auto',
+    raw.notch_filter(np.arange(50, 125, 50), filter_length='auto',
                      phase='zero')
     # Run ICA on raw data to find blinks and eog
     try:

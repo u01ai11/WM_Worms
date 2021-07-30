@@ -13,6 +13,8 @@ This is fairly standard:
 from os.path import join
 from os import listdir
 import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import mne
 try:
@@ -43,16 +45,17 @@ flist = [i for i in flist if not any([ii in i for ii in exclude])]
 #%% Manual bad segment and bad file removal
 # unfortunately we have large artefacts in this dataset, so we need to manually label some artefactual segments
 # this is a manual process, as relying on the automated functions below doesn't always work.
-
+plt.ioff()
 # loop through and annotate bad segments in the fif files
 for raw_f in flist:
     print(f'{flist.index(raw_f)} out of {len(flist)}')
     raw = mne.io.read_raw_fif(join(maxpath, raw_f), verbose=False)
-    fig = raw.plot()
-    fig.canvas.key_press_event('a')
-    response = input("0 to accept or 1 to reject:")
+    fig = raw.plot(duration=600, n_channels=306, block=True, clipping=1.)
+    print("0 to accept or 1 to reject:")
+    response = sys.stdin.readline()
+    response = int(response.split("\n")[0])
     if int(response) == 0:
-        raw.save(join(maxpath, f'{flist[0][0:-16]}_checked.fif'))
+        raw.save(join(maxpath, f'{raw_f[0:-16]}_checked.fif'), overwrite=True)
     else:
         print('toobad!')
 
