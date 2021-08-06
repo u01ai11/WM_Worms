@@ -25,7 +25,7 @@ except:
     from REDTools import epoch
 
 #%% initial processing - postcue
-cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned_cbu') # dire
 clean = [f for f in listdir(cleandir) if 'no' not in f]
 ids = list(set([i.split('_')[0] for i in clean]))
 ids.sort()
@@ -38,7 +38,7 @@ epochs = epoch.epoch_multiple(ids=ids,
                                  event_dict=event_dict,
                                  time_dict= time_dict,
                                  indir=cleandir,
-                                 outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                 outdir=join(constants.BASE_DIRECTORY, 'epoched_cbu'),
                                  file_id='postcue',
                                  cluster=True,
                                  scriptdir=join(constants.BASE_DIRECTORY, 'b_scripts'),
@@ -123,7 +123,7 @@ result = epoch_multiple_meta(
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
-                                     outdir=join(constants.BASE_DIRECTORY, 'epoched'),
+                                     outdir=join(constants.BASE_DIRECTORY, 'epoched_cbu'),
                                      file_id='metapostcue',
                                      njobs=5,
                                      all_trials=all_trials)
@@ -136,7 +136,7 @@ result = epoch_multiple_meta(
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
-                                     outdir=join(constants.BASE_DIRECTORY, 'new_epochs_2'),
+                                     outdir=join(constants.BASE_DIRECTORY, 'epoched_cbu'),
                                      file_id='metastim',
                                      njobs=11,
                                      all_trials=all_trials)
@@ -154,7 +154,7 @@ Alex's note to self
 result_e = [(ind, i[2]) for ind, i in enumerate(result) if i[2] != False]
 error_ids = [good_ids[i[0]] for i in result_e]
 #%% mop up and manually align error trials
-epodir = join(constants.BASE_DIRECTORY, 'new_epochs_2')
+epodir = join(constants.BASE_DIRECTORY, 'epoched_cbu')
 check = [i for i in listdir(epodir) if 'metastim' in i]
 
 checklength= []
@@ -179,7 +179,7 @@ epoch.epoch_downsample_cluster(check, epodir, 1, 80, 250, False, scriptdir, pyth
 #%% Read in and visually inspect the visual evoked response
 
 
-epodir = join(constants.BASE_DIRECTORY, 'new_epochs')
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs_unfilt')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
 

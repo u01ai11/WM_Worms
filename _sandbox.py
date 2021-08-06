@@ -793,7 +793,7 @@ import copy
 trial_adjust = 0
 #trial_adjust = 11*60000
 epoch = copy.copy(epo)
-epoch_points = [epoch[i].events[0,0] for i in range(len(epoch))]
+epoch_points = [epoch[i].events[0,0]*4 for i in range(len(epoch))]
 trial_ranges = [(b-trial_adjust, e-trial_adjust) for b, e in zip(this_trials.iti_onset, this_trials.probe_onset)]
 
 fig, ax = plt.subplots()

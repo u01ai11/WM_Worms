@@ -12,6 +12,8 @@ from os import listdir
 import numpy as np
 import mne
 import joblib
+from scipy.io import loadmat
+import pandas as pd
 try:
     import constants
     from REDTools import preprocess
@@ -41,33 +43,74 @@ def split_raw(file):
 epochs_list = joblib.Parallel(n_jobs=15)(
     joblib.delayed(split_raw)(file) for file in listdir(rawdir))
 #%%
-trans2 = join(constants.BASE_DIRECTORY, 'raw', '99064_worms_raw.fif')
-#for file in listdir(splitdir):
+trans2 = join(constants.BASE_DIRECTORY, 'raw_split', '99040_worms_raw-1.fif')
+
+#lets load in the origin points according to the cusotom fit we ran before
+
+origs = loadmat(join(constants.BASE_DIRECTORY, 'maxfilter_3', 'all_orig.mat'))['all_orig']
+orig_files = loadmat(join(constants.BASE_DIRECTORY, 'maxfilter_3', 'all_files.mat'))
+orig_files = [i[0][0][0] for i in orig_files['all_files']]
+files_and_orig = [[a,b] for a,b in zip(origs, orig_files)]
+#%%
+for file in listdir(splitdir):
+#for file in dropped:
+    #get orig
+    #get_bads
+    badfile = f"{file.split('.fif')[0]}_bad.txt"
+    print(os.path.exists(join(constants.BASE_DIRECTORY, 'maxfilter_3', badfile)))
+
+#%%
+all_files = listdir(splitdir)
+baddolist = []
+#for i, file in enumerate(all_files):
 for file in dropped:
+    #get orig
+    index_external = orig_files.index(file)
+    orig = " ".join([str(int(i)) for i in origs[index_external]])
     fpath = join(splitdir, file)
+
+    #get_bads
+    badfile = join(constants.BASE_DIRECTORY, 'maxfilter_3', f"{file.split('.fif')[0]}_bad.txt")
+    if os.path.exists(badfile):
+        with open(badfile, 'r') as f:
+            bads = f.read()
+        badrows = [i.split(" ") for i in bads.split('\n')][0:-1]
+        #badrows = np.array([[int(ii) for ii in i] for i in badrows])
+        badrows = sum(badrows, [])
+        bad_ids, bad_counts = np.unique(badrows, return_counts=True)
+        bad_perc = bad_counts / len(bads.split('\n'))
+        bad_final = bad_ids[bad_perc>.05]
+        badstring = " ".join([str(i) for i in bad_final])
+        print(badstring)
+    else:
+        badstring = ""
+        continue
+    baddolist.append(badstring)
+
+#%
     max_opts = dict(max_cmd = '/neuro/bin/util/maxfilter-2.2',
-        f = join(fpath),
-        o = join(constants.BASE_DIRECTORY, 'maxfilter_2', file),
-        trans = trans2,
-        frame = 'head',
-        regularize = 'in',
-        st = '10',
-        cor = '0.98',
-        orig = '0 0 45',
-        inval = '8',
-        outval = '3',
-        movecomp = 'inter',
-        bads_cmd = '',
-        lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{file.split(".")[0]}.log'),
-        hpi_g = '0.98',
-        hpi_e = '5',
-        hpi_step = '200')
+    f = join(fpath),
+    o = join(constants.BASE_DIRECTORY, 'maxfilter_4', file),
+    trans = trans2,
+    frame = 'head',
+    regularize = 'in',
+    st = '10',
+    cor = '0.98',
+    orig = orig,
+    inval = '8',
+    outval = '3',
+    movecomp = 'inter',
+    bads_cmd = f'-bad {badstring}',
+    lg = join(constants.BASE_DIRECTORY, 'b_logs', f'{file.split(".")[0]}.log'),
+    hpi_g = '0.98',
+    hpi_e = '5',
+    hpi_step = '200')
 
     maxFilt(cluster=True, **max_opts)
 
 #%% check progress
 started = listdir(splitdir)
-done = listdir(join(constants.BASE_DIRECTORY, 'maxfilter_2'))
+done = listdir(join(constants.BASE_DIRECTORY, 'maxfilter_4'))
 dropped = [i for i in started if i not in done]
 
 #%% check dropped files and then re-run with HPI error allowance
@@ -95,7 +138,7 @@ retry = np.load(join(constants.BASE_DIRECTORY, 'failed_movecomp.npy'))
 #%% check we can open raw files
 
 for i, file in enumerate(done):
-    fpath = join(constants.BASE_DIRECTORY, 'maxfilter_2',file)
+    fpath = join(constants.BASE_DIRECTORY, 'maxfilter_4',file)
     size = os.path.getsize(fpath) /100000
     if size < 10:
         continue

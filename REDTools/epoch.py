@@ -243,6 +243,8 @@ def epoch_meta(epo, indir, all_trials, _id):
     iterlim = 10000
     revs = 0
 
+    #factor for adjusting for samplerate
+    sfact = 1000/epo.info['sfreq']
     # optimisation for speed (i.e. don't perform operations on pandas DF)
     time_array = this_trials[['start', 'end']].to_numpy()  # array is faster
     epo_ev = epo.events.copy() # copy to prevent issues with original object
@@ -252,7 +254,7 @@ def epoch_meta(epo, indir, all_trials, _id):
         unfound_ind = []
         trial_inds = []
         for ind in range(len(epo)):
-            epo_s = epo_ev[ind, 0]  # this epoch's time in ms
+            epo_s = epo_ev[ind, 0] * sfact  # this epoch's time in ms
             mask = (time_array[:, 0] - trial_adjust <= epo_s) & (time_array[:, 1] - trial_adjust >= epo_s)
             if mask.sum() == 0:
                 unfound_ind.append(ind)

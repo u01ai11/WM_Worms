@@ -130,7 +130,7 @@ def __preprocess_individual(file, outdir, overwrite):
         return ''
 
     raw.filter(0.1, None)
-    raw.notch_filter(np.arange(50, 125, 50), filter_length='auto',
+    raw.notch_filter(np.arange(50, 241, 50), filter_length='auto',
                      phase='zero')
     # Run ICA on raw data to find blinks and eog
     try:
@@ -187,7 +187,7 @@ def __preprocess_individual(file, outdir, overwrite):
         outfname = f'{outdir}/{num}_noeog_clean_{append}'
     else:
         outfname = f'{outdir}/{num}_clean_{append}'
-
+    raw = raw.resample(250,preload=True)
     raw.save(outfname, overwrite=overwrite)
     save_file_path = outfname
     # return
@@ -231,11 +231,13 @@ def maxFilt(cluster=False, **kw):
     if movecomp == False:
         max_cmd = f"{maxf_cmd} -f {f} -o {o} -trans {trans} -frame {frame} -regularize {regularize}" \
                   f" -st {st} -corr {cor} -origin {orig} -in {inval} -out {outval}" \
-                  f" {bads_cmd}-autobad on -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
+                  f" -autobad off {bads_cmd} -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
     else:
         max_cmd = f"{maxf_cmd} -f {f} -o {o} -trans {trans} -frame {frame} -regularize {regularize}" \
                   f" -st {st} -corr {cor} -origin {orig} -in {inval} -out {outval} -movecomp {movecomp} -hpistep {hpi_step}" \
-                  f" {bads_cmd}-autobad on -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
+                  f" -autobad off {bads_cmd} -force -linefreq 50 -v -hpig {hpi_g} -hpie {hpi_e} | tee {lg}"
+
+
 
     if cluster:
         # submit to cluster

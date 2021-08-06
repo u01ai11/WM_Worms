@@ -30,10 +30,12 @@ except:
 ##############################
 #%% 2. Filtering & Denoising #
 ##############################
-maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_3')
-flist = [f for f in listdir(maxpath) if 'trans1stdef.fif' in f]
+maxpath=join(constants.BASE_DIRECTORY, 'maxfilter_4')
+flist = [f for f in listdir(maxpath) if 'raw-1.fif' in f]
+flist2 = [f for f in listdir(maxpath) if 'raw.fif' in f]
+flist = flist + flist2
 indir = maxpath
-outdir = join(constants.BASE_DIRECTORY, 'cleaned_cbu')
+outdir = join(constants.BASE_DIRECTORY, 'cleaned_4')
 scriptpath = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = constants.PYTHON_PATH
 overwrite = False
@@ -41,6 +43,10 @@ overwrite = False
 
 exclude = ['128739138']
 flist = [i for i in flist if not any([ii in i for ii in exclude])]
+
+#%% rename the trans1stdef file because they don't have the correct names
+for fname in flist:
+    os.rename(join(maxpath, fname), join(maxpath, f'{fname.split("_trans1stdef")[0]}.fif'))
 
 #%% Manual bad segment and bad file removal
 # unfortunately we have large artefacts in this dataset, so we need to manually label some artefactual segments
@@ -64,7 +70,10 @@ for raw_f in flist:
 preprocess.preprocess_cluster(flist, indir, outdir, scriptpath, pythonpath ,overwrite, constants.REPO_PATH)
 
 #%% check output
-started = [i for i in listdir(maxpath) if '.fif' in i]
+flist = [f for f in listdir(maxpath) if 'raw-1.fif' in f]
+flist2 = [f for f in listdir(maxpath) if 'raw.fif' in f]
+flist = flist + flist2
+started = flist
 done = listdir(outdir)
 extension_names =  ['_noeog_noecg_clean_','_noeog_clean_',
                     '_noecg_clean','_clean_']
@@ -112,7 +121,7 @@ plot_out = '/home/ai05/'
 i =0
 f = man_ica[i]
 raw = mne.io.read_raw_fif(f'{outdir}/{f}', preload=True)
-raw.plot(start=120).savefig('/home/ai05/raw1.png')
+raw.plot(start=40).savefig('/home/ai05/raw1.png')
 #%%
 #raw.filter(1,75)
 ica = mne.preprocessing.ICA(method='picard', n_components=15).fit(raw,decim=25)
@@ -134,31 +143,32 @@ append = 'raw' + append + '.fif'
 if raw is not None:
     raw.save(f'{outdir}/{num}_clean_{append}', overwrite=True)
     os.remove(f'{outdir}/{f}')
-
+#%%
 i +=1
 print(f'{i+1} out of {len(man_ica)}')
 f = man_ica[i]
 raw = mne.io.read_raw_fif(f'{outdir}/{f}', preload=True)
-if len(raw)/1000 < 60:
+if len(raw)/150 < 60:
     print('file to small, delete!')
     del(raw)
     os.remove(f'{outdir}/{f}')
 else:
-    raw.plot(start=120).savefig(f'{plot_out}raw1.png')
+    raw.plot(start=40).savefig(f'{plot_out}raw1.png')
+    raw.plot(duration=600, n_channels=120, block=True, clipping=1.)
     ica = mne.preprocessing.ICA(n_components=25, method='picard').fit(raw,decim=25)
     comps = ica.plot_components()
     #comps[0].savefig(f'{plot_out}comp1.png')
     #comps[1].savefig(f'{plot_out}comp2.png')
-    ica.plot_sources(raw,start=120, show_scrollbars=False)
+    ica.plot_sources(raw,start=40, show_scrollbars=False)
     print(man_ica[i])
-#%% SELECT THE COMPONENTS HERE
+ #%% SELECT THE COMPONENTS HERE
 # change inds and decide
-ica.exclude =[0,9,10]
+ica.exclude =[3,8]
 raw = ica.apply(raw)
 # if you need to plot the channels
 # CHECK THE PLOT TO SEE IF YOU PICKED A GOOD INDEX
 # NOTE: you may need to change the start time
-raw.plot(start=120).savefig(f'{plot_out}raw2.png')
+raw.plot(start=40).savefig(f'{plot_out}raw2.png')
 
 #%% Identify participants with valid clean files
 clean = [f for f in listdir(outdir) if 'no' not in f]
