@@ -187,7 +187,7 @@ def __preprocess_individual(file, outdir, overwrite):
         outfname = f'{outdir}/{num}_noeog_clean_{append}'
     else:
         outfname = f'{outdir}/{num}_clean_{append}'
-    raw = raw.resample(250,copy=True)
+    raw = raw.resample(250)
     raw.save(outfname, overwrite=overwrite)
     save_file_path = outfname
     # return
