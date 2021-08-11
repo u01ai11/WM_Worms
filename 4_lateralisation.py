@@ -43,16 +43,18 @@ except:
 invdir = join(constants.BASE_DIRECTORY, 'inverse_ops')
 fsdir = '/imaging/astle/users/ai05/RED/RED_MEG/resting/STRUCTURALS/FS_SUBDIR'
 
-epodir = join(constants.BASE_DIRECTORY, 'new_epochs_2')
+epodir = join(constants.BASE_DIRECTORY, 'epoched_final')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
 
-#%% Select files with 'good' visual evoked responses
+#%Select files with 'good' visual evoked responses
 file_includes = np.load(join(constants.BASE_DIRECTORY, 'good_visual_evoked.npy'))
 #file_includes = files
+#%%
 epochs = mne.epochs.read_epochs(join(epodir, file_includes[0]))
 epochs.apply_baseline(baseline=(2,2.5))
 epochs.crop(tmin=1.5, tmax=3.5)
+epochs.drop_bad(reject=dict(grad=4000e-13, mag=4e-11))
 freqs = np.arange(4., 35., 1.)
 n_cycles = freqs / 2.
 power = mne.time_frequency.tfr_multitaper(epochs, freqs=freqs,
@@ -84,18 +86,20 @@ def av_evoked(file):
     try:
         epochs = mne.epochs.read_epochs(join(epodir, file))
         epochs.pick_types(meg=sen)
-        epochs.apply_baseline(baseline=(1.5, 2))
-        epochs.crop(tmin=1.5, tmax=3.5)
+        epochs
+        epochs.apply_baseline(baseline=(-0.5, 0))
+        epochs.crop(tmin=2.5, tmax=3.5)
 
-        #detect artefacts in epochs and reject if at more than one timepoint
-        bad_es = []
-        for i in range(len(epochs)):
-            bad_es.append(sails.utils.detect_artefacts(epochs[i]._data[0], axis=1,
-                                     reject_mode='dim',
-                                     ret_mode='bad_inds').sum())
-        bad_es_mask = np.array(bad_es) > bad_thresh
-        epochs = epochs[~bad_es_mask]
-        epochs = epochs.equalize_event_counts(['cue_dir == 0', 'cue_dir == 1', 'cue_dir == -1'])[0]
+        #
+        # #detect artefacts in epochs and reject if at more than one timepoint
+        # bad_es = []
+        # for i in range(len(epochs)):
+        #     bad_es.append(sails.utils.detect_artefacts(epochs[i]._data[0], axis=1,
+        #                              reject_mode='dim',
+        #                              ret_mode='bad_inds').sum())
+        # bad_es_mask = np.array(bad_es) > bad_thresh
+        # epochs = epochs[~bad_es_mask]
+        # epochs = epochs.equalize_event_counts(['cue_dir == 0', 'cue_dir == 1', 'cue_dir == -1'])[0]
         l = epochs['cue_dir == 0']
         r = epochs['cue_dir == 1']
         n = epochs['cue_dir == -1']
@@ -107,11 +111,12 @@ def av_evoked(file):
         l_cue = mne.combine_evoked([lav, nav], [1,-1])
         r_cue = mne.combine_evoked([rav, nav], [1, -1])
         cue = mne.combine_evoked([cav, nav], [1, -1])
+        _all= epochs.average()
     except:
         print(file)
         print(epochs)
     #return(lav,rav)
-    return(lav, rav, nav)
+    return(lav, rav, nav, _all)
 
     #return(l_cue, r_cue)
 
@@ -124,7 +129,7 @@ l_r = joblib.Parallel(n_jobs=15)(
 print([i[2] for i in l_r])
 #%%
 for pair in l_r:
-    pair[0].plot_joint()
+    pair[3].plot_joint()
 
 #%% cluster test
 X_L = np.empty((len(l_r), len(l_r[0][0].times), l_r[0][0].data.shape[0]))
@@ -134,7 +139,7 @@ L_E = []
 R_E = []
 N_E = []
 for i in range(len(l_r)):
-    X_L[i,:,:] = np.transpose(l_r[i][0].data, (1,0))
+    X_L[i,:,:] = np.transpose(l_r[i][3].data, (1,0))
     X_R[i,:,:] = np.transpose(l_r[i][1].data, (1,0))
     X_N[i, :, :] = np.transpose(l_r[i][2].data, (1, 0))
     L_E.append(l_r[i][0])
@@ -143,14 +148,14 @@ for i in range(len(l_r)):
 
 #connectivity strutctrue
 adjacency = mne.channels.find_ch_adjacency(l_r[0][0].info, ch_type=sen)
-
-threshold = 3  # very high, but the test is quite sensitive on this data
+#%%
+threshold = 6.5  # very high, but the test is quite sensitive on this data
 #threshold = dict(start=4, step=0.5)
 # set family-wise p-value
 p_accept = 0.05
 sigma = 1e-3
 stat_fun_hat = partial(ttest_1samp_no_p, sigma=sigma)
-cluster_stats = mne.stats.spatio_temporal_cluster_1samp_test((X_L - X_N), n_permutations=1000,
+cluster_stats = mne.stats.spatio_temporal_cluster_1samp_test((X_L), n_permutations=1000,
                                              threshold=threshold, tail=0,
                                              n_jobs=10, buffer_size=None,
                                              adjacency=adjacency[0], stat_fun=stat_fun_hat)
@@ -161,8 +166,8 @@ print(good_cluster_inds)
 print(p_values.min())
 print([np.unique(clusters[i][0]) for i in good_cluster_inds])
 #%% Plot clusters
-labels_plot = ['Left Cue', 'Neutral Cue']
-evs = [L_E, N_E]
+labels_plot = ['Left Cue', 'Right Cue']
+evs = [L_E, R_E]
 colors = {labels_plot[0]: "crimson", labels_plot[1]: 'steelblue'}
 linestyles = {"L": '-', "R": '--'}
 
@@ -248,8 +253,9 @@ for i_clu, clu_idx in enumerate(good_cluster_inds):
 #%% Does this time-course predict the accuracy of participants?
 # read in meta data and trial data
 meta = pd.read_csv(join(constants.BASE_DIRECTORY, 'Combined3.csv'))
+meta['id'] = meta.Alex_ID
 all_trials = pd.read_csv(join(constants.BASE_DIRECTORY, 'all_trials.csv'))
-
+all_trials['id'] = all_trials.id.astype(str)
 # left or right
 glm_data = copy.copy(X_L)
 
@@ -257,12 +263,17 @@ file_includes_even = file_includes[0:-1]
 glm_data = glm_data[0:-1]
 
 #predictors to use (column names for the all_trials)
-keys = ['ang_dist']
+keys = ['ang_dist', 'Age', 'WASI_Mat', 'subjective_SES']
+src = [all_trials, meta, meta,meta, ]
 reg_data = np.zeros((len(glm_data), len(keys)))
 for i, key in enumerate(keys):
     for ii, filename in enumerate(file_includes_even):
         _id = int(filename.split('_')[0])
-        reg_data[ii,i] = all_trials[all_trials.id == _id][key].mean()
+        reg_data[ii,i] = src[i][src[i].id == str(_id)][key].abs().mean()
+
+        for iii in range(reg_data.shape[1]):
+            reg_data[np.isnan(reg_data[:,iii]),iii] = np.nanmean(reg_data[:,iii])
+
 # build glm
 # regressors
 regs = list()
@@ -294,14 +305,14 @@ model = glmtools.fit.OLSModel( des, dat )
 # Cluster permutations - detect contiguous regions containing effects.
 perm_args = {'cluster_forming_threshold': 1, 'pooled_dims': (1, 2)}
 perms = 100
-i = 0
-CP = glmtools.permutations.ClusterPermutation(des, dat, i, perms, perm_args=perm_args, metric='tstats', nprocesses=5)
+i = 2
+CP = glmtools.permutations.ClusterPermutation(des, dat, i, perms, perm_args=perm_args, metric='betas', nprocesses=5)
 cluster_masks, cluster_stats = CP.get_sig_clusters(dat, 95)
 print(cluster_stats)
 
 #%% get the cluster
 
-clus_ind = 1
+clus_ind = 0
 
 cluster_mask = (cluster_masks == clus_ind).astype(int)
 

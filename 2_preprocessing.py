@@ -45,9 +45,9 @@ exclude = ['128739138']
 flist = [i for i in flist if not any([ii in i for ii in exclude])]
 
 #%% rename the trans1stdef file because they don't have the correct names
-for fname in flist:
-    os.rename(join(maxpath, fname), join(maxpath, f'{fname.split("_trans1stdef")[0]}.fif'))
-
+#for fname in flist:
+    #os.rename(join(maxpath, fname), join(maxpath, f'{fname.split("_trans1stdef")[0]}.fif'))
+    #os.rename(join(maxpath, fname), join(maxpath, f'{fname.split(".fif.fif")[0]}.fif'))
 #%% Manual bad segment and bad file removal
 # unfortunately we have large artefacts in this dataset, so we need to manually label some artefactual segments
 # this is a manual process, as relying on the automated functions below doesn't always work.

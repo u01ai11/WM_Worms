@@ -98,6 +98,8 @@ def __preprocess_individual(file, outdir, overwrite):
 
     """
     save_file_path = ""
+    no_ecg_removed = False
+    no_eog_removed = False
 
     num =  os.path.basename(file).split('_')[0]
     if os.path.basename(file).split('raw')[1] != '.fif':

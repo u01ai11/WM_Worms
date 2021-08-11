@@ -25,7 +25,7 @@ except:
     from REDTools import epoch
 
 #%% initial processing - postcue
-cleandir = join(constants.BASE_DIRECTORY, 'cleaned_cbu') # dire
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
 clean = [f for f in listdir(cleandir) if 'no' not in f]
 ids = list(set([i.split('_')[0] for i in clean]))
 ids.sort()
@@ -38,7 +38,7 @@ epochs = epoch.epoch_multiple(ids=ids,
                                  event_dict=event_dict,
                                  time_dict= time_dict,
                                  indir=cleandir,
-                                 outdir=join(constants.BASE_DIRECTORY, 'epoched_cbu'),
+                                 outdir=join(constants.BASE_DIRECTORY, 'epoched_4'),
                                  file_id='postcue',
                                  cluster=True,
                                  scriptdir=join(constants.BASE_DIRECTORY, 'b_scripts'),
@@ -97,6 +97,7 @@ all_trials = pd.DataFrame(columns=list(df.columns) + ['id'])
 good_ids = []
 for _id in ids:
     _file = [f for f in data_trials if _id in f]
+    print(len(_file))
     if len(_file) == 0:
         continue
     try:
@@ -129,6 +130,10 @@ result = epoch_multiple_meta(
                                      all_trials=all_trials)
 
 #%% Try with stim
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned_cbu') # dire
+clean = [f for f in listdir(cleandir) if 'no' not in f]
+#%%
+
 event_dict = {'STIM': 202}
 time_dict = {'tmin': -0.5,'tmax': 4.5,'baseline': None}
 result = epoch_multiple_meta(
@@ -136,7 +141,7 @@ result = epoch_multiple_meta(
                                      event_dict = event_dict,
                                      time_dict=time_dict,
                                      indir=cleandir,
-                                     outdir=join(constants.BASE_DIRECTORY, 'epoched_cbu'),
+                                     outdir=join(constants.BASE_DIRECTORY, 'epoched_final'),
                                      file_id='metastim',
                                      njobs=11,
                                      all_trials=all_trials)
@@ -160,10 +165,16 @@ check = [i for i in listdir(epodir) if 'metastim' in i]
 checklength= []
 for file in check:
     epo = mne.epochs.read_epochs(join(epodir, file), preload=False)
-    tlen = len(all_trials[all_trials.id == file.split('_')[0]]) -4
+    tlen = len(all_trials[all_trials.id == file.split('_')[0]])
     elen = len(epo)
-    checklength.append((tlen,elen))
+    checklength.append((tlen,elen, file))
 
+#%% identify IDs with large nbumber of missing files
+lost_data = []
+for file, lens in zip(check, checklength):
+    if lens[1] < 50:
+        lost_data.append(file)
+lost_ids = [i.split('_')[0] for i in lost_data]
 #%% filter and downsample the above
 # uncomment to do locally
 # output = joblib.Parallel(n_jobs=15)(
@@ -179,10 +190,9 @@ epoch.epoch_downsample_cluster(check, epodir, 1, 80, 250, False, scriptdir, pyth
 #%% Read in and visually inspect the visual evoked response
 
 
-epodir = join(constants.BASE_DIRECTORY, 'new_epochs_unfilt')
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs_2')
 files = [i for i in listdir(epodir) if 'metastim' in i]
 ids = [i.split('_')[0] for i in files]
-
 #%% just look at group average with visual evoked
 
 # First read in the files
@@ -193,6 +203,7 @@ def get_epochs(file,dir):
     epochs.pick_types(meg=True)
     epochs.crop(tmin=-0.5, tmax=1)
     epochs.apply_baseline(baseline=(None, 0))
+    epochs.drop_bad(reject=dict(grad=4000e-13, mag=4e-11))
     #evoked = epochs.average()
     return epochs
 
@@ -218,3 +229,19 @@ for i in range(len(epochs_list)):
 
 file_includes = np.array(files)[include]
 np.save(join(constants.BASE_DIRECTORY, 'good_visual_evoked.npy'), file_includes)
+
+
+#%% drop noisy and flat epochs
+epodir = join(constants.BASE_DIRECTORY, 'new_epochs_2')
+files = file_includes
+ids = [i.split('_')[0] for i in files]
+def drop_epochs(file,dir):
+    #load in epochs
+    _id = file.split('_')[0]
+    epochs = mne.epochs.read_epochs(join(dir, file))
+    epochs.drop_bad(reject=dict(grad=4000e-13, mag=4e-11))
+    epochs.save(join(constants.BASE_DIRECTORY, "epoched_final",file))
+    return epochs
+
+epochs_list = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(drop_epochs)(file,epodir) for file in files)

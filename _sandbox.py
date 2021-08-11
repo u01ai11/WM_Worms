@@ -890,3 +890,172 @@ ica.exclude.extend(eog_inds)
 ecg_epochs = mne.preprocessing.create_ecg_epochs(raw)  # get epochs of eog (if this exists)
 ecg_inds, ecg_scores = ica.find_bads_ecg(ecg_epochs)
 ica.exclude.extend(ecg_inds)
+
+#%%
+i = 0
+part_files = part_files_all[i]
+_id = ids[i]
+
+p_id = part_files[0].split('_')[0]
+
+#%%
+# First we read in epochs from all passed in participant files
+datelist = []
+epolist = []
+for file in part_files:
+    # If file which will be read anyway, skip
+    if '-1.fif' in file or '-2.fif' in file:
+        if os.path.isfile(join(indir, f'{file.split("-")[0]}.fif')):
+            continue
+    raw = mne.io.read_raw_fif(join(indir, file), preload=True)
+    datelist.append(raw.info['meas_date'])
+    # events = find_events_CBU(raw)
+    events = mne.find_events(raw, shortest_event=1)
+    epochs = mne.Epochs(raw, events, event_dict, tmin=time_dict['tmin'],
+                        tmax=time_dict['tmax'], baseline=time_dict['baseline'],
+                        preload=True, proj=True)
+    epolist.append(epochs)
+    del (raw)
+
+# if we had more than one, then order them by date and calculate seconds difference for offsetting
+if len(epolist) > 1:
+    epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)]  # tuples of time and epochs
+    epotime = sorted(epotime, key=lambda row: row[0])  # sort epochs
+    epolist = [i[1] for i in epotime]
+
+    epotime = [(d.timestamp(), e) for d, e in zip(datelist, epolist)]  # tuples of time and epochs
+    epotime = sorted(epotime, key=lambda row: row[0])  # sort epochs
+    time_diffs = [epotime[i + 1][0] - epotime[0][0] for i in
+                  range(len(epotime) - 1)]  # workout offset times for all in lists relative to first scan
+    for off_ep in range(
+            len(time_diffs)):  # now adjust all these epochs (other than first one) to account for offset
+        for i in range(len(epolist[off_ep + 1])):  # loop through epoch events
+            epolist[off_ep + 1].events[i, 0] = epolist[off_ep + 1].events[i, 0] + (
+                        time_diffs[off_ep] * 1000)  # add this offset
+
+    epo = mne.concatenate_epochs(epolist, add_offset=False)  # concatenate, disabling MNEs default offsetting
+else:
+    epo = epolist[0]
+
+#%%
+
+this_trials = all_trials[all_trials.id == _id]  # get trials for this ID
+# calculate start and ends of epochs in time since start of recording
+this_trials['end'] = this_trials['probe_onset'] + this_trials['resp_onset'] + this_trials['resp_duration']
+this_trials['start'] = this_trials['iti_onset']
+
+# settings for iterating
+trial_adjust = 0
+iterations = 0
+itercrement = 250
+iterlim = 10000
+revs = 0
+
+#factor for adjusting for samplerate
+sfact = 1000/epo.info['sfreq']
+# optimisation for speed (i.e. don't perform operations on pandas DF)
+time_array = this_trials[['start', 'end']].to_numpy()  # array is faster
+epo_ev = epo.events.copy() # copy to prevent issues with original object
+aligned = False # flag for alignment
+#%%
+while not aligned:
+    print(iterations)
+    unfound_ind = []
+    trial_inds = []
+    for ind in range(len(epo)):
+        epo_s = epo_ev[ind, 0] * sfact  # this epoch's time in ms
+        mask = (time_array[:, 0] - trial_adjust <= epo_s) & (time_array[:, 1] - trial_adjust >= epo_s)
+        if mask.sum() == 0:
+            unfound_ind.append(ind)
+        else:
+            trial_inds.append(np.where(mask == True)[0][0])
+    if len(unfound_ind) == 0:
+        meta_df = this_trials.iloc[trial_inds]
+        epo.metadata = meta_df
+        aligned = True
+    else:
+        trial_adjust = trial_adjust + itercrement
+        iterations += 1
+        if iterations > iterlim:
+            # reverse if we haven't already
+            if itercrement > 0:
+                iterations = 0
+                trial_adjust = 0
+                itercrement = 0 - itercrement
+            else:
+                # break if we have already
+                raise RuntimeError(f'Failed to find alignments. {len(unfound_ind)} out of {len(epo)} epochs misallinged')
+    # we can filter somewhere else (commented out for speed)
+    # epo.filter(1, 200., fir_design='firwin', skip_by_annotation='edge')
+    # epo.resample(600., npad='auto')
+#%%
+ep_meta = epoch_meta(epo, indir, all_trials, _id)
+epochs = ep_meta[0]
+missed_epochs = ep_meta[1]
+
+
+#%%
+
+sen = 'mag'
+
+event_labels = ['Stimulus', 'Cue', 'Probe']
+event_onsets = [0, 2, 3.5]
+event_offsets = [1, 2.5, 4.496]
+bad_thresh = 10
+def av_evoked(file):
+    try:
+        epochs = mne.epochs.read_epochs(join(epodir, file))
+        epochs.pick_types(meg=sen)
+        epochs
+        epochs.apply_baseline(baseline=(3, 3.5))
+        epochs.crop(tmin=3, tmax=4.5)
+
+        l = epochs['targ == 0']
+        r = epochs['targ == 1']
+        lav = l.average()
+        rav = r.average()
+
+    except:
+        print(file)
+        print(epochs)
+    #return(lav,rav)
+    return(lav, rav)
+
+    #return(l_cue, r_cue)
+
+l_r = joblib.Parallel(n_jobs=15)(
+    joblib.delayed(av_evoked)(file) for file in file_includes)
+
+# l_r = []
+# for f in file_includes:
+#     l_r.append(av_evoked(f))
+print([i[2] for i in l_r])
+#%%
+
+X_L = np.empty((len(l_r), len(l_r[0][0].times), l_r[0][0].data.shape[0]))
+X_R = np.empty((len(l_r), len(l_r[0][0].times), l_r[0][0].data.shape[0]))
+L_E = []
+R_E = []
+for i in range(len(l_r)):
+    X_L[i,:,:] = np.transpose(l_r[i][0].data, (1,0))
+    X_R[i,:,:] = np.transpose(l_r[i][1].data, (1,0))
+    L_E.append(l_r[i][0])
+    R_E.append(l_r[i][1])
+
+#connectivity strutctrue
+adjacency = mne.channels.find_ch_adjacency(l_r[0][0].info, ch_type=sen)
+#%%#
+
+threshold = 5.8  # very high, but the test is quite sensitive on this data
+#threshold = dict(start=4, step=0.5)
+# set family-wise p-value
+p_accept = 0.01
+sigma = 1e-3
+stat_fun_hat = partial(ttest_1samp_no_p, sigma=sigma)
+cluster_stats = mne.stats.spatio_temporal_cluster_1samp_test((X_L - X_R), n_permutations=1000,
+                                             threshold=threshold, tail=0,
+                                             n_jobs=10, buffer_size=None,
+                                             adjacency=adjacency[0], stat_fun=stat_fun_hat)
+
+T_obs, clusters, p_values, _ = cluster_stats
+good_cluster_inds = np.where(p_values < p_accept)[0]
