@@ -109,13 +109,35 @@ for _id in ids:
     all_trials = all_trials.append(_df, ignore_index=True)
     good_ids.append(_id)
 
-#%% save the all files for later
-all_trials.to_csv(join(constants.BASE_DIRECTORY, 'all_trials.csv'))
+#%%
+all_trials['offset'] = all_trials['targ_ang'] - all_trials['resp_ang']
+all_trials['offset'] = all_trials['offset'].astype('float')
+all_trials['offset_abs'] = all_trials['offset'].abs()
+all_trials['cue_type'] = ['neutral' if i == -1 else 'valid' for i in all_trials['cue_dir']]
+
+def ang_dist(f, zero):
+    f = np.array(f)
+    o_t = f[:,0]
+    o_r = f[:,1]
+    # moduli after division
+    ori1 = o_t % zero
+    ori2 = o_r % zero
+
+    # calculate the difference
+    error = ori2 - ori1
+    # where the difference is larger then a clockwise 90 degree rotation, it
+    # should be counted as a counter-clockwise (negative) rotation
+    error[error > zero / 2] = -1 * (zero - error[error > zero / 2])
+    error[error <= -zero / 2] = (zero + error[error <= -zero / 2])
+    return error
+
+all_trials['ang_dist'] = ang_dist(all_trials[['targ_ang', 'resp_ang']],90)
+
+#all_trials.to_csv(join(constants.BASE_DIRECTORY, 'all_trials.csv'))
+
 #%% whittle out poor performers
 trials = [(i, len(all_trials[all_trials.id == i])) for i in good_ids]
 good_ids = [i[0] for i in trials if i[1] > 34]
-
-
 #%% Try with postcue
 event_dict = {'L_CUE': 250,'R_CUE': 251,'N_CUE': 252}
 time_dict = {'tmin': -0.5,'tmax': 1.5,'baseline': (None,0)}
@@ -130,7 +152,7 @@ result = epoch_multiple_meta(
                                      all_trials=all_trials)
 
 #%% Try with stim
-cleandir = join(constants.BASE_DIRECTORY, 'cleaned_cbu') # dire
+cleandir = join(constants.BASE_DIRECTORY, 'cleaned') # dire
 clean = [f for f in listdir(cleandir) if 'no' not in f]
 #%%
 
@@ -159,7 +181,7 @@ Alex's note to self
 result_e = [(ind, i[2]) for ind, i in enumerate(result) if i[2] != False]
 error_ids = [good_ids[i[0]] for i in result_e]
 #%% mop up and manually align error trials
-epodir = join(constants.BASE_DIRECTORY, 'epoched_cbu')
+epodir = join(constants.BASE_DIRECTORY, 'epoched_final')
 check = [i for i in listdir(epodir) if 'metastim' in i]
 
 checklength= []
@@ -168,7 +190,8 @@ for file in check:
     tlen = len(all_trials[all_trials.id == file.split('_')[0]])
     elen = len(epo)
     checklength.append((tlen,elen, file))
-
+#%%
+checklength
 #%% identify IDs with large nbumber of missing files
 lost_data = []
 for file, lens in zip(check, checklength):
@@ -184,8 +207,6 @@ lost_ids = [i.split('_')[0] for i in lost_data]
 scriptdir = join(constants.BASE_DIRECTORY, 'b_scripts')
 pythonpath = '/home/ai05/.conda/envs/mne_2/bin/python'
 epoch.epoch_downsample_cluster(check, epodir, 1, 80, 250, False, scriptdir, pythonpath)
-
-
 
 #%% Read in and visually inspect the visual evoked response
 

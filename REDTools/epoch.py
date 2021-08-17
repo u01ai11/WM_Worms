@@ -7,6 +7,7 @@ import joblib
 import pandas as pd
 import sys
 import traceback
+import sails
 
 def epoch_participant(part_files, event_dict,time_dict, indir, outdir, file_id):
     """
@@ -136,9 +137,15 @@ def epoch_multiple_meta(ids, event_dict,time_dict, indir, outdir, file_id, njobs
     all_files = [f for f in listdir(indir) if 'no' not in f]
     part_files_all = [[i for i in all_files if p in i] for p in ids]
 
-    output = joblib.Parallel(n_jobs=njobs)(
-        joblib.delayed(epoch_participant_meta)(part_files, event_dict,time_dict, indir, outdir, file_id, all_trials, _id) for part_files, _id in zip(part_files_all, ids)
-    )
+    if njobs > 1:
+        output = joblib.Parallel(n_jobs=njobs)(
+            joblib.delayed(epoch_participant_meta)(part_files, event_dict,time_dict, indir, outdir, file_id, all_trials, _id) for part_files, _id in zip(part_files_all, ids)
+        )
+    else:
+        output = []
+        for part_files, _id in zip(part_files_all, ids):
+            result = epoch_participant_meta(part_files, event_dict,time_dict, indir, outdir, file_id, all_trials, _id)
+            output.append(result)
 
 
     return output
@@ -331,8 +338,18 @@ epoch.epoch_downsample('{file}','{epodir}', {high}, {low}, {rate}, {savgol})
         # save to directory
         print(tcshf, file=open(join(scriptdir, f'{_tracker}_epoch.csh'), 'w'))
         # execute this on the cluster
-        os.system(f"sbatch --job-name=epoch_{_tracker} --mincpus=4 -t 0-3:00 {join(scriptdir, f'{_tracker}_epoch.csh')}")
+        os.system(f"sbatch --job-name=epoch_{_tracker} -t 0-2:00 {join(scriptdir, f'{_tracker}_epoch.csh')}")
 
+
+def remove_bad(epochs, bad_thresh):
+    bad_es = []
+    for i in range(len(epochs)):
+        bad_es.append(sails.utils.detect_artefacts(epochs[i]._data[0], axis=1,
+                                                   reject_mode='dim',
+                                                   ret_mode='bad_inds').sum())
+    bad_es_mask = np.array(bad_es) > bad_thresh
+    epochs = epochs[~bad_es_mask]
+    return epochs
 
 def epoch_downsample(eponame,epodir, high, low, rate, savgol):
     """
